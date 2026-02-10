@@ -333,13 +333,15 @@ class TestConsumerPipeline:
         assert result.stdout.strip() == "true", "Consumer container not running"
 
     def test_consumer_connected_to_clickhouse(self):
-        """Look for the 'Connected to ClickHouse' line in recent logs."""
+        """Look for the 'connected to ClickHouse' line in recent logs."""
         result = subprocess.run(
             ["docker", "logs", "--tail", "50", "clif-consumer"],
             capture_output=True, text=True, timeout=10,
         )
-        assert "Connected to ClickHouse" in result.stdout or \
-               "Connected to ClickHouse" in result.stderr, \
+        combined = result.stdout + result.stderr
+        assert "connected to ClickHouse" in combined.lower() or \
+               "Connected to ClickHouse" in combined or \
+               "connected to ClickHouse" in combined, \
                "Consumer did not connect to ClickHouse"
 
     def test_consumer_subscribed_to_topics(self):

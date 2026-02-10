@@ -1,6 +1,26 @@
 <clickhouse>
     <listen_host>0.0.0.0</listen_host>
 
+    <!-- ================================================================= -->
+    <!-- MergeTree Engine Tuning                                           -->
+    <!-- ================================================================= -->
+    <merge_tree>
+        <parts_to_delay_insert>300</parts_to_delay_insert>
+        <parts_to_throw_insert>600</parts_to_throw_insert>
+        <max_bytes_to_merge_at_max_space_in_pool>161061273600</max_bytes_to_merge_at_max_space_in_pool>
+        <number_of_free_entries_in_pool_to_execute_mutation>20</number_of_free_entries_in_pool_to_execute_mutation>
+    </merge_tree>
+
+    <!-- ================================================================= -->
+    <!-- Background Pool Sizing                                            -->
+    <!-- ================================================================= -->
+    <background_pool_size>16</background_pool_size>
+    <background_move_pool_size>8</background_move_pool_size>
+    <background_merges_mutations_concurrency_ratio>4</background_merges_mutations_concurrency_ratio>
+    <background_schedule_pool_size>16</background_schedule_pool_size>
+    <background_fetches_pool_size>8</background_fetches_pool_size>
+    <background_common_pool_size>8</background_common_pool_size>
+
     <remote_servers>
         <clif_cluster>
             <shard>

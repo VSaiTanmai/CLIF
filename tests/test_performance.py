@@ -162,43 +162,32 @@ def _wait_count(ch, table, field, value, expected, timeout=60):
     return found
 
 
-# =============================================================================
-# Test 1: Burst Write Throughput
-# =============================================================================
-
-
-class TestBurstThroughput:
-    """Measure maximum producer throughput to Redpanda."""
-
-    EVENTS = 50_000  # per topic, 200k total
-
-    def test_burst_produce_throughput(self, kafka_producer):
-        """Produce 200k events across 4 topics and measure rate."""
-        tag = f"burst-{uuid.uuid4().hex[:8]}"
-        total_delivered = 0
-        total_errors = 0
-
-        t0 = time.perf_counter()
-        for topic, gen_fn in TOPIC_GENERATORS.items():
-            d, e = _produce_batch(kafka_producer, topic, gen_fn, tag, self.EVENTS)
-            total_delivered += d
-            total_errors += e
-        elapsed = time.perf_counter() - t0
-
-        eps = total_delivered / elapsed if elapsed > 0 else 0
-        print(f"\n  [Burst] Delivered: {total_delivered:,} | "
-              f"Errors: {total_errors} | "
-              f"Elapsed: {elapsed:.2f}s | "
-              f"Rate: {eps:,.0f} events/sec")
-
-        assert total_errors == 0, f"Delivery errors: {total_errors}"
-        assert total_delivered >= self.EVENTS * 4 * 0.99, "Too many events lost"
-        # Dev target: ≥10k/s (production target would be ≥100k/s)
-        assert eps >= 10_000, f"Throughput too low: {eps:.0f}/s (need ≥10k)"
+def _wait_for_consumer_idle(ch, table="raw_logs", stable_seconds=2.0, timeout=30):
+    """Wait until the consumer has drained its backlog (row count stabilises)."""
+    prev = 0
+    stable_since = None
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            r = ch.query(f"SELECT count() FROM {table}")
+            cur = r.result_rows[0][0]
+        except Exception:
+            time.sleep(0.5)
+            continue
+        if cur == prev:
+            if stable_since is None:
+                stable_since = time.monotonic()
+            elif time.monotonic() - stable_since >= stable_seconds:
+                return cur  # backlog drained
+        else:
+            stable_since = None
+            prev = cur
+        time.sleep(0.3)
+    return prev  # best-effort
 
 
 # =============================================================================
-# Test 2: End-to-End Latency
+# Test 1: End-to-End Latency  (runs FIRST — no backlog)
 # =============================================================================
 
 
@@ -208,6 +197,9 @@ class TestE2ELatency:
     PROBE_SIZE = 50
 
     def test_e2e_latency_under_5s(self, kafka_producer, ch1):
+        # Drain any residual backlog from prior test runs
+        _wait_for_consumer_idle(ch1, stable_seconds=2.0, timeout=15)
+
         tag = f"lat-{uuid.uuid4().hex[:8]}"
 
         events = [gen_raw_log(tag) for _ in range(self.PROBE_SIZE)]
@@ -270,6 +262,41 @@ class TestE2ELatency:
 
 
 # =============================================================================
+# Test 2: Burst Write Throughput  (runs AFTER latency probes)
+# =============================================================================
+
+
+class TestBurstThroughput:
+    """Measure maximum producer throughput to Redpanda."""
+
+    EVENTS = 50_000  # per topic, 200k total
+
+    def test_burst_produce_throughput(self, kafka_producer):
+        """Produce 200k events across 4 topics and measure rate."""
+        tag = f"burst-{uuid.uuid4().hex[:8]}"
+        total_delivered = 0
+        total_errors = 0
+
+        t0 = time.perf_counter()
+        for topic, gen_fn in TOPIC_GENERATORS.items():
+            d, e = _produce_batch(kafka_producer, topic, gen_fn, tag, self.EVENTS)
+            total_delivered += d
+            total_errors += e
+        elapsed = time.perf_counter() - t0
+
+        eps = total_delivered / elapsed if elapsed > 0 else 0
+        print(f"\n  [Burst] Delivered: {total_delivered:,} | "
+              f"Errors: {total_errors} | "
+              f"Elapsed: {elapsed:.2f}s | "
+              f"Rate: {eps:,.0f} events/sec")
+
+        assert total_errors == 0, f"Delivery errors: {total_errors}"
+        assert total_delivered >= self.EVENTS * 4 * 0.99, "Too many events lost"
+        # Dev target: ≥10k/s (production target would be ≥100k/s)
+        assert eps >= 10_000, f"Throughput too low: {eps:.0f}/s (need ≥10k)"
+
+
+# =============================================================================
 # Test 3: ClickHouse Query Performance
 # =============================================================================
 
@@ -301,7 +328,7 @@ class TestQueryPerformance:
 
 
 # =============================================================================
-# Test 4: Direct ClickHouse Insert Performance
+# Test 4: Direct ClickHouse Insert Performance  (post-burst)
 # =============================================================================
 
 
