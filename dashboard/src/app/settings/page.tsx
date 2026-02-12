@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,39 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 export default function SettingsPage() {
+  const [sources, setSources] = useState<Array<{ name: string; host: string; status: string }>>([
+    { name: "ClickHouse", host: "clickhouse-01:9000, clickhouse-02:9000", status: "Checking…" },
+    { name: "Redpanda", host: "redpanda-0:9092, redpanda-1:9092, redpanda-2:9092", status: "Checking…" },
+    { name: "Prometheus", host: "prometheus:9090", status: "Checking…" },
+    { name: "MinIO (S3 Tiering)", host: "minio:9000", status: "Checking…" },
+  ]);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    async function probe() {
+      abortRef.current?.abort();
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
+      try {
+        const res = await fetch("/api/system", { cache: "no-store", signal: ctrl.signal });
+        if (!res.ok) return;
+        const json = await res.json();
+        const svcNames = (json.services as Array<{ name: string; status: string }>).map((s) => s.name.toLowerCase());
+        setSources((prev) =>
+          prev.map((src) => {
+            const key = src.name.toLowerCase().split(" ")[0];
+            const alive = svcNames.some((n) => n.includes(key)) || (key === "clickhouse" && json.clickhouseInserted != null);
+            return { ...src, status: alive ? "Connected" : "Unreachable" };
+          })
+        );
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+      }
+    }
+    probe();
+    return () => { abortRef.current?.abort(); };
+  }, []);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -96,28 +130,7 @@ export default function SettingsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {[
-                {
-                  name: "ClickHouse",
-                  host: "clickhouse-01:9000, clickhouse-02:9000",
-                  status: "Connected",
-                },
-                {
-                  name: "Redpanda",
-                  host: "redpanda-0:9092, redpanda-1:9092, redpanda-2:9092",
-                  status: "Connected",
-                },
-                {
-                  name: "Prometheus",
-                  host: "prometheus:9090",
-                  status: "Connected",
-                },
-                {
-                  name: "MinIO (S3 Tiering)",
-                  host: "minio:9000",
-                  status: "Connected",
-                },
-              ].map((src) => (
+              {sources.map((src) => (
                 <div
                   key={src.name}
                   className="flex items-center justify-between rounded-md border px-4 py-3"
@@ -128,7 +141,7 @@ export default function SettingsPage() {
                       {src.host}
                     </p>
                   </div>
-                  <Badge variant="low" className="text-[10px]">
+                  <Badge variant={src.status === "Connected" ? "low" : src.status === "Checking…" ? "info" : "critical"} className="text-[10px]">
                     {src.status}
                   </Badge>
                 </div>

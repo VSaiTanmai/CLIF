@@ -6,18 +6,21 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatNumber(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return "0";
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return n.toLocaleString();
 }
 
 export function formatRate(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return "0/s";
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M/s`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K/s`;
   return `${Math.round(n)}/s`;
 }
 
 export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "0 B";
   if (bytes >= 1_099_511_627_776) return `${(bytes / 1_099_511_627_776).toFixed(1)} TB`;
   if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(1)} GB`;
   if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MB`;
@@ -28,7 +31,9 @@ export function formatBytes(bytes: number): string {
 export function timeAgo(date: Date | string): string {
   const now = new Date();
   const d = typeof date === "string" ? new Date(date) : date;
+  if (isNaN(d.getTime())) return "unknown";
   const seconds = Math.floor((now.getTime() - d.getTime()) / 1000);
+  if (seconds < 0) return "just now";
   if (seconds < 60) return `${seconds}s ago`;
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m ago`;

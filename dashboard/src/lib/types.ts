@@ -11,6 +11,7 @@ export interface DashboardMetrics {
   tableCounts?: Record<string, number>;
   evidenceBatches?: number;
   evidenceAnchored?: number;
+  mitreTopTechniques?: Array<{ technique: string; tactic: string; count: number }>;
 }
 
 /* ── Generic event row ── */

@@ -457,6 +457,51 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* MITRE ATT&CK Techniques */}
+      {(data?.mitreTopTechniques?.length ?? 0) > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm font-medium">
+              <Shield className="h-4 w-4 text-red-500" />
+              MITRE ATT&CK Techniques
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">Top techniques observed (last 7 days)</p>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {data!.mitreTopTechniques!.map((m, i) => {
+                const maxCount = data!.mitreTopTechniques![0]?.count ?? 1;
+                const pct = (m.count / maxCount) * 100;
+                return (
+                  <div key={i} className="group flex items-center gap-3 text-sm">
+                    <span className="w-4 shrink-0 text-xs text-muted-foreground tabular-nums">
+                      {i + 1}
+                    </span>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-xs truncate">{m.technique}</span>
+                        <Badge variant="info" className="shrink-0 text-[10px]">
+                          {m.tactic}
+                        </Badge>
+                        <span className="shrink-0 tabular-nums text-xs text-muted-foreground">
+                          {formatNumber(m.count)}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-red-500/60 transition-all"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

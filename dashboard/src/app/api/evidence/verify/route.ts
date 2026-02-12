@@ -1,8 +1,15 @@
 import { NextResponse } from "next/server";
-import { queryClickHouse } from "@/lib/clickhouse";
+import { queryClickHouse, assertValidTable } from "@/lib/clickhouse";
 import { createHash } from "crypto";
+import { checkRateLimit, getClientId } from "@/lib/rate-limit";
+import { log } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
+
+/** Tables for which we know hash expressions — strict allowlist */
+const HASH_TABLES = new Set(["raw_logs", "security_events", "process_events", "network_events"]);
+
+const RATE_LIMIT = { maxTokens: 10, refillRate: 0.5 }; // Verification is expensive — lower rate
 
 function sha256Hex(data: string): string {
   return createHash("sha256").update(data).digest("hex");
@@ -50,6 +57,9 @@ function getHashExpr(table: string): string {
 }
 
 export async function GET(request: Request) {
+  const limited = checkRateLimit(getClientId(request), RATE_LIMIT);
+  if (limited) return limited;
+
   const { searchParams } = new URL(request.url);
   const batchId = searchParams.get("batchId");
 
@@ -106,6 +116,16 @@ export async function GET(request: Request) {
     const storedRoot = anchor.merkle_root;
     const prevRoot = anchor.prev_merkle_root;
 
+    // CRITICAL: Validate table name from DB before SQL interpolation
+    assertValidTable(tableName);
+    if (!HASH_TABLES.has(tableName)) {
+      log.error("Evidence verify: unsupported hash table from DB", { tableName, batchId, component: "api/evidence/verify" });
+      return NextResponse.json(
+        { error: "Unsupported table for hash verification" },
+        { status: 400 }
+      );
+    }
+
     // Re-fetch event hashes from ClickHouse and recompute Merkle root
     const hashExpr = getHashExpr(tableName);
     const hashResult = await queryClickHouse<{ h: string }>(
@@ -138,8 +158,9 @@ export async function GET(request: Request) {
       status: verified ? "PASS" : "FAIL — TAMPERING DETECTED",
     });
   } catch (err) {
+    log.error("Evidence verification failed", { batchId: searchParams.get("batchId"), error: err instanceof Error ? err.message : "unknown", component: "api/evidence/verify" });
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Verification failed" },
+      { error: "Verification failed" },
       { status: 500 }
     );
   }

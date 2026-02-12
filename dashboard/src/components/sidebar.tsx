@@ -75,6 +75,8 @@ export function Sidebar() {
   return (
     <TooltipProvider delayDuration={0}>
       <aside
+        role="navigation"
+        aria-label="Main navigation"
         className={cn(
           "fixed left-0 top-0 z-40 flex h-screen flex-col border-r bg-card transition-all duration-200",
           collapsed ? "w-16" : "w-60",
@@ -140,6 +142,7 @@ export function Sidebar() {
         <button
           onClick={() => setCollapsed(!collapsed)}
           className="flex h-10 items-center justify-center border-t text-muted-foreground hover:text-foreground"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {collapsed ? (
             <ChevronRight className="h-4 w-4" />

@@ -25,6 +25,14 @@ interface SystemData {
   services: Array<{ name: string; status: string; metric?: string }>;
   clickhouseInserted: string | null;
   redpandaBrokers: string | null;
+  redpanda?: {
+    brokers: number | null;
+    brokerDetails: Array<{ nodeId: number; cores: number; status: string; alive: boolean }> | null;
+    totalPartitions: number | null;
+    topics: string[] | null;
+    isHealthy: boolean | null;
+    controllerId: number | null;
+  };
 }
 
 // Static config for service enrichment
@@ -211,6 +219,11 @@ export default function SystemHealthPage() {
             <CardTitle className="flex items-center gap-2 text-sm font-medium">
               <Radio className="h-4 w-4 text-primary" />
               Redpanda Cluster
+              {data?.redpanda?.isHealthy != null && (
+                <Badge variant={data.redpanda.isHealthy ? "low" : "critical"} className="ml-auto text-[9px]">
+                  {data.redpanda.isHealthy ? "Healthy" : "Degraded"}
+                </Badge>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -219,27 +232,59 @@ export default function SystemHealthPage() {
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
                   Brokers
                 </p>
-                <p className="mt-1 text-2xl font-bold tabular-nums">3</p>
+                {loading ? <Skeleton className="h-8 w-12 mt-1" /> : (
+                  <p className="mt-1 text-2xl font-bold tabular-nums">
+                    {data?.redpanda?.brokers ?? data?.redpandaBrokers ?? "—"}
+                  </p>
+                )}
               </div>
               <div>
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
                   Partitions
                 </p>
-                <p className="mt-1 text-2xl font-bold tabular-nums">12</p>
-              </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Replication Factor
-                </p>
-                <p className="mt-1 text-sm font-medium">3</p>
+                {loading ? <Skeleton className="h-8 w-12 mt-1" /> : (
+                  <p className="mt-1 text-2xl font-bold tabular-nums">
+                    {data?.redpanda?.totalPartitions ?? "—"}
+                  </p>
+                )}
               </div>
               <div>
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
                   Topics
                 </p>
-                <p className="mt-1 text-sm font-medium">clif-raw-logs (v2 LZ4)</p>
+                {loading ? <Skeleton className="h-5 w-32 mt-1" /> : (
+                  <p className="mt-1 text-sm font-medium">
+                    {data?.redpanda?.topics?.join(", ") ?? "—"}
+                  </p>
+                )}
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Controller
+                </p>
+                {loading ? <Skeleton className="h-5 w-12 mt-1" /> : (
+                  <p className="mt-1 text-sm font-medium">
+                    Node {data?.redpanda?.controllerId ?? "—"}
+                  </p>
+                )}
               </div>
             </div>
+            {data?.redpanda?.brokerDetails && (
+              <>
+                <Separator className="my-3" />
+                <div className="space-y-2">
+                  {data.redpanda.brokerDetails.map((b) => (
+                    <div key={b.nodeId} className="flex items-center justify-between text-xs">
+                      <span className="font-mono text-muted-foreground">broker-{b.nodeId}</span>
+                      <span className="text-muted-foreground">{b.cores} cores</span>
+                      <Badge variant={b.alive ? "low" : "critical"} className="text-[9px]">
+                        {b.alive ? "Active" : "Down"}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

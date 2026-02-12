@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { queryClickHouse } from "@/lib/clickhouse";
+import { checkRateLimit, getClientId } from "@/lib/rate-limit";
+import { log } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
@@ -16,8 +18,12 @@ const TABLE_COLUMNS: Record<string, string> = {
 };
 
 const VALID_TABLES = new Set(Object.keys(TABLE_COLUMNS));
+const RATE_LIMIT = { maxTokens: 30, refillRate: 2 };
 
 export async function GET(request: Request) {
+  const limited = checkRateLimit(getClientId(request), RATE_LIMIT);
+  if (limited) return limited;
+
   const { searchParams } = new URL(request.url);
   const table = searchParams.get("table") || "all";
 
@@ -44,18 +50,25 @@ export async function GET(request: Request) {
       return NextResponse.json({ data: result.data });
     }
 
-    const safeTable = VALID_TABLES.has(table) ? table : "raw_logs";
-    const columns = TABLE_COLUMNS[safeTable];
+    if (!VALID_TABLES.has(table)) {
+      return NextResponse.json(
+        { error: "Invalid table parameter" },
+        { status: 400 }
+      );
+    }
+
+    const columns = TABLE_COLUMNS[table];
     const result = await queryClickHouse(
       `SELECT ${columns}
-       FROM clif_logs.${safeTable}
+       FROM clif_logs.${table}
        ORDER BY timestamp DESC
        LIMIT 100`
     );
     return NextResponse.json({ data: result.data });
   } catch (err) {
+    log.error("Event stream failed", { table, error: err instanceof Error ? err.message : "unknown", component: "api/events/stream" });
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Stream failed" },
+      { error: "Failed to fetch event stream" },
       { status: 500 }
     );
   }

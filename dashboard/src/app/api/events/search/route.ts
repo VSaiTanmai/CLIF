@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { queryClickHouse } from "@/lib/clickhouse";
+import { checkRateLimit, getClientId } from "@/lib/rate-limit";
+import { log } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +18,16 @@ const TABLE_COLUMNS: Record<string, string> = {
 };
 
 const ALLOWED_TABLES = new Set(Object.keys(TABLE_COLUMNS));
+/** Tables that have a `severity` column — only apply severity filters to these */
+const SEVERITY_TABLES = new Set(["security_events"]);
 const MAX_LIMIT = 200;
 const MAX_OFFSET = 100_000; // Prevent excessive OFFSET scans
+const RATE_LIMIT = { maxTokens: 30, refillRate: 2 };
 
 export async function GET(req: NextRequest) {
+  const limited = checkRateLimit(getClientId(req), RATE_LIMIT);
+  if (limited) return limited;
+
   const { searchParams } = req.nextUrl;
   const query = searchParams.get("q") || "";
   const table = searchParams.get("table") || "raw_logs";
@@ -29,7 +37,11 @@ export async function GET(req: NextRequest) {
   const timeFrom = searchParams.get("from");
   const timeTo = searchParams.get("to");
 
-  const safeTable = ALLOWED_TABLES.has(table) ? table : "raw_logs";
+  if (!ALLOWED_TABLES.has(table)) {
+    return NextResponse.json({ error: "Invalid table parameter" }, { status: 400 });
+  }
+
+  const safeTable = table;
   const columns = TABLE_COLUMNS[safeTable];
 
   try {
@@ -47,7 +59,8 @@ export async function GET(req: NextRequest) {
       conditions.push(`position(lower(${haystack}), lower({q:String})) > 0`);
       params.q = query;
     }
-    if (severity) {
+    // Only apply severity filter to tables that actually have the column
+    if (severity && SEVERITY_TABLES.has(safeTable)) {
       const sev = Math.max(0, Math.min(4, Math.floor(Number(severity)) || 0));
       conditions.push(`severity >= {sev:UInt8}`);
       params.sev = sev;
@@ -87,8 +100,9 @@ export async function GET(req: NextRequest) {
       offset,
     });
   } catch (err) {
+    log.error("Event search failed", { table: safeTable, error: err instanceof Error ? err.message : "unknown", component: "api/events/search" });
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Search failed" },
+      { error: "Search failed" },
       { status: 500 }
     );
   }
