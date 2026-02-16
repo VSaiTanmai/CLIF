@@ -53,22 +53,22 @@ export async function GET(request: Request) {
           ),
           queryClickHouse<{ eps: string }>(
             `SELECT greatest(
-               (SELECT sum(event_count) / 10
+               ifNull((SELECT sum(event_count) / 10
                 FROM clif_logs.events_per_10s
-                WHERE ts >= now() - INTERVAL 10 SECOND),
-               (SELECT sum(event_count) / greatest(10, dateDiff('second', min(ts), max(ts) + INTERVAL 10 SECOND))
+                WHERE ts >= now() - INTERVAL 10 SECOND), 0),
+               ifNull((SELECT sum(event_count) / greatest(10, dateDiff('second', min(ts), max(ts) + INTERVAL 10 SECOND))
                 FROM clif_logs.events_per_10s
-                WHERE ts >= now() - INTERVAL 60 SECOND),
-               (SELECT max(bin_total) / 10 FROM (
+                WHERE ts >= now() - INTERVAL 60 SECOND), 0),
+               ifNull((SELECT max(bin_total) / 10 FROM (
                   SELECT sum(event_count) AS bin_total
                   FROM clif_logs.events_per_10s
                   WHERE ts >= now() - INTERVAL 1 HOUR
-                  GROUP BY ts)),
-               (SELECT coalesce(value, 0)
+                  GROUP BY ts)), 0),
+               ifNull((SELECT coalesce(value, 0)
                 FROM clif_logs.pipeline_metrics
                 WHERE metric = 'producer_eps'
                   AND ts >= now() - INTERVAL 5 MINUTE
-                ORDER BY ts DESC LIMIT 1)
+                ORDER BY ts DESC LIMIT 1), 0)
              ) AS eps`
           ),
           queryClickHouse<{ cnt: string }>(

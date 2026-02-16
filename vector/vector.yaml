@@ -173,6 +173,32 @@ sources:
 
 transforms:
 
+  # ── Step 0: Route HTTP Source ────────────────────────────────────────────
+  # Split pre-classified Windows agent events (Sysmon/Security/PowerShell)
+  # from standard HTTP JSON events. Windows agent events already conform to
+  # the CLIF Common Schema and bypass the entire classification chain.
+
+  route_http_source:
+    type: route
+    inputs:
+      - "http_json"
+    route:
+      windows_agent: 'exists(.clif_event_type)'
+      standard: '!exists(.clif_event_type)'
+
+  # ── Route Windows Agent Events by Type ─────────────────────────────────
+  # Pre-classified events from the Windows Vector agent → dedup → Redpanda.
+
+  route_windows_events:
+    type: route
+    inputs:
+      - "route_http_source.windows_agent"
+    route:
+      security: 'to_string!(.clif_event_type) == "security"'
+      process: 'to_string!(.clif_event_type) == "process"'
+      network: 'to_string!(.clif_event_type) == "network"'
+      raw: 'to_string!(.clif_event_type) == "raw"'
+
   # ── Step 1: Parse & Structure Raw Events ──────────────────────────────────
   # Unify all source formats into a common intermediate structure before
   # CCS normalization. Handles JSON, syslog, plain text.
@@ -182,7 +208,7 @@ transforms:
     inputs:
       - "syslog_tcp"
       - "syslog_udp"
-      - "http_json"
+      - "route_http_source.standard"
       - "docker_logs"
       - "file_logs"
       - "journald"
@@ -627,6 +653,7 @@ transforms:
     type: dedupe
     inputs:
       - "format_raw"
+      - "route_windows_events.raw"             # Pre-classified Windows events
     fields:
       match:
         - "timestamp"
@@ -639,6 +666,7 @@ transforms:
     type: dedupe
     inputs:
       - "format_security"
+      - "route_windows_events.security"        # Pre-classified Windows events
     fields:
       match:
         - "timestamp"
@@ -651,6 +679,7 @@ transforms:
     type: dedupe
     inputs:
       - "format_process"
+      - "route_windows_events.process"         # Pre-classified Windows events
     fields:
       match:
         - "timestamp"
@@ -664,6 +693,7 @@ transforms:
     type: dedupe
     inputs:
       - "format_network"
+      - "route_windows_events.network"         # Pre-classified Windows events
     fields:
       match:
         - "timestamp"
