@@ -870,3 +870,34 @@ services:
         reservations:
           cpus: '0.5'
           memory: 1G
+  # =========================================================================
+  # AI Classifier Service — Tier-2 ML-based Security Event Classification
+  # =========================================================================
+  ai-classifier:
+    container_name: clif-ai-classifier
+    build:
+      context: ./ai-agents
+      dockerfile: Dockerfile
+    environment:
+      AI_SERVICE_PORT: 8200
+    ports:
+      - "8200:8200"
+    networks:
+      - clif-backend
+      - clif-frontend
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8200/health')\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging: *default-logging
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
