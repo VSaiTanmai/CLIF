@@ -49,10 +49,10 @@ const WORKFLOW_ICONS: Record<WorkflowState, React.ElementType> = {
 };
 
 const WORKFLOW_STYLES: Record<WorkflowState, string> = {
-  New: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-  Acknowledged: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-  Investigating: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-  Resolved: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  New: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+  Acknowledged: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+  Investigating: "bg-orange-500/10 text-orange-600 border-orange-500/20",
+  Resolved: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
 };
 
 export default function AlertsPage() {
@@ -154,7 +154,7 @@ export default function AlertsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Alerts</h1>
+          <h1 className="text-[26px] font-bold tracking-tight">Alerts</h1>
           <p className="text-sm text-muted-foreground">
             Security alerts with severity ≥ Medium (last 24h)
           </p>
@@ -320,7 +320,7 @@ export default function AlertsPage() {
       {/* Alert List */}
       <Card>
         <CardHeader className="pb-0">
-          <CardTitle className="flex items-center gap-2 text-sm font-medium">
+          <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
             Alert Queue
             {/* Select all toggle in header */}
             {filtered.length > 0 && (
@@ -362,7 +362,7 @@ export default function AlertsPage() {
               {/* Empty state */}
               {filtered.length === 0 && !error ? (
                 <div className="flex flex-col items-center gap-2 px-4 py-12 text-center">
-                  <CheckCircle2 className="h-8 w-8 text-emerald-400" />
+                  <CheckCircle2 className="h-8 w-8 text-emerald-600" />
                   <p className="text-sm font-medium">
                     {alertsWithState.length === 0
                       ? "No alerts in the last 24 hours"

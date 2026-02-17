@@ -77,7 +77,7 @@ export default function SystemHealthPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">System Health</h1>
+          <h1 className="text-[26px] font-bold tracking-tight">System Health</h1>
           <p className="text-sm text-muted-foreground">
             Live infrastructure monitoring via Prometheus & Redpanda Admin API
           </p>
@@ -125,7 +125,7 @@ export default function SystemHealthPage() {
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
             <div className="rounded-md bg-emerald-500/10 p-2">
-              <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
             </div>
             <div>
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -134,7 +134,7 @@ export default function SystemHealthPage() {
               {loading ? (
                 <Skeleton className="h-7 w-12" />
               ) : (
-                <p className="text-xl font-bold tabular-nums text-emerald-400">
+                <p className="text-xl font-bold tabular-nums text-emerald-600">
                   {healthyCount}
                 </p>
               )}
@@ -144,7 +144,7 @@ export default function SystemHealthPage() {
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
             <div className="rounded-md bg-red-500/10 p-2">
-              <XCircle className="h-5 w-5 text-red-400" />
+              <XCircle className="h-5 w-5 text-red-600" />
             </div>
             <div>
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -153,7 +153,7 @@ export default function SystemHealthPage() {
               {loading ? (
                 <Skeleton className="h-7 w-12" />
               ) : (
-                <p className="text-xl font-bold tabular-nums text-red-400">
+                <p className="text-xl font-bold tabular-nums text-red-600">
                   {downCount}
                 </p>
               )}
@@ -185,7 +185,7 @@ export default function SystemHealthPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm font-medium">
+            <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
               <Database className="h-4 w-4 text-primary" />
               ClickHouse
             </CardTitle>
@@ -216,7 +216,7 @@ export default function SystemHealthPage() {
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
                   S3 Tiering
                 </p>
-                <p className="mt-1 text-sm font-medium text-emerald-400">Active (MinIO)</p>
+                <p className="mt-1 text-sm font-medium text-emerald-600">Active (MinIO)</p>
               </div>
               <div>
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -232,7 +232,7 @@ export default function SystemHealthPage() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm font-medium">
+            <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
               <Radio className="h-4 w-4 text-primary" />
               Redpanda Cluster
               {data?.redpanda?.isHealthy != null && (
@@ -308,7 +308,7 @@ export default function SystemHealthPage() {
       {/* Service List */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm font-medium">
+          <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
             <Activity className="h-4 w-4 text-primary" />
             Service Status
           </CardTitle>

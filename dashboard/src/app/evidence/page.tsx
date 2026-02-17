@@ -41,10 +41,10 @@ interface VerifyResult {
 }
 
 const TABLE_COLORS: Record<string, string> = {
-  raw_logs: "bg-blue-500/10 text-blue-400 border-blue-500/30",
-  security_events: "bg-red-500/10 text-red-400 border-red-500/30",
-  process_events: "bg-amber-500/10 text-amber-400 border-amber-500/30",
-  network_events: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
+  raw_logs: "bg-blue-500/10 text-blue-600 border-blue-500/30",
+  security_events: "bg-red-500/10 text-red-600 border-red-500/30",
+  process_events: "bg-amber-500/10 text-amber-600 border-amber-500/30",
+  network_events: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30",
 };
 
 export default function EvidencePage() {
@@ -105,7 +105,7 @@ export default function EvidencePage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Chain of Custody</h1>
+        <h1 className="text-[26px] font-bold tracking-tight">Chain of Custody</h1>
         <p className="text-sm text-muted-foreground">
           Merkle tree evidence integrity — SHA-256 hashed, S3 Object Lock archived
         </p>
@@ -144,7 +144,7 @@ export default function EvidencePage() {
               Verification Rate
             </p>
             {loading ? <Skeleton className="mt-1 h-8 w-20" /> : (
-              <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-400">
+              <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-600">
                 {summary.verificationRate}%
               </p>
             )}
@@ -181,10 +181,10 @@ export default function EvidencePage() {
       <Card className="border-emerald-500/20">
         <CardContent className="flex items-center gap-4 p-4">
           <div className="rounded-full bg-emerald-500/10 p-3">
-            <Shield className="h-6 w-6 text-emerald-400" />
+            <Shield className="h-6 w-6 text-emerald-600" />
           </div>
           <div>
-            <p className="text-sm font-medium text-emerald-400">
+            <p className="text-sm font-medium text-emerald-600">
               {summary.verificationRate === 100
                 ? "All Evidence Verified — Integrity Intact"
                 : `${summary.verificationRate}% Verified`}
@@ -210,7 +210,7 @@ export default function EvidencePage() {
       {/* Batch History */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm font-medium">
+          <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
             <Layers className="h-4 w-4 text-primary" />
             Anchor Batch History
             <span className="ml-auto text-xs text-muted-foreground font-normal">
@@ -304,7 +304,7 @@ export default function EvidencePage() {
                         <td className="px-4 py-3">
                           {batch.s3Key ? (
                             <div className="flex items-center gap-1">
-                              <Link2 className="h-3 w-3 text-emerald-400" />
+                              <Link2 className="h-3 w-3 text-emerald-600" />
                               <span className="font-mono text-[10px] text-muted-foreground truncate max-w-[120px]">
                                 {batch.s3Key.split("/").pop()}
                               </span>

@@ -122,14 +122,14 @@ export default function LiveFeedPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Live Feed</h1>
+          <h1 className="text-[26px] font-bold tracking-tight">Live Feed</h1>
           <p className="text-sm text-muted-foreground">
             Real-time event stream from all sources
           </p>
         </div>
         <div className="flex items-center gap-3">
           {rate > 500 && (
-            <div className="flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-amber-400">
+            <div className="flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-amber-600">
               <AlertTriangle className="h-3.5 w-3.5" />
               <span className="text-[11px] font-medium">High throughput — UI may lag</span>
             </div>
@@ -214,7 +214,7 @@ export default function LiveFeedPage() {
           <span className="ml-auto text-xs text-muted-foreground tabular-nums">
             {formatNumber(filtered.length)} / {formatNumber(events.length)} shown
             {filtered.length > 500 && (
-              <span className="ml-1 text-amber-400">(rendering top 500)</span>
+              <span className="ml-1 text-amber-600">(rendering top 500)</span>
             )}
           </span>
         </CardContent>
@@ -223,7 +223,7 @@ export default function LiveFeedPage() {
       {/* Event Stream Table */}
       <Card>
         <CardHeader className="pb-0">
-          <CardTitle className="flex items-center gap-2 text-sm font-medium">
+          <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
             <Radio className="h-4 w-4 text-emerald-500" />
             Event Stream
           </CardTitle>
@@ -289,10 +289,10 @@ export default function LiveFeedPage() {
                       </td>
                       <td className="px-4 py-1.5">
                         <span className={`inline-flex rounded-sm border px-1.5 py-0.5 text-[9px] font-medium ${
-                          event._table === "security_events" ? "bg-red-500/10 text-red-400 border-red-500/20" :
-                          event._table === "process_events" ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
-                          event._table === "network_events" ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/20" :
-                          "bg-zinc-500/10 text-zinc-400 border-zinc-500/20"
+                          event._table === "security_events" ? "bg-red-500/10 text-red-600 border-red-500/20" :
+                          event._table === "process_events" ? "bg-blue-500/10 text-blue-600 border-blue-500/20" :
+                          event._table === "network_events" ? "bg-cyan-500/10 text-cyan-600 border-cyan-500/20" :
+                          "bg-zinc-500/10 text-zinc-500 border-zinc-500/20"
                         }`}>
                           {event._table?.replace("_events", "").replace("_logs", "") ?? "raw"}
                         </span>

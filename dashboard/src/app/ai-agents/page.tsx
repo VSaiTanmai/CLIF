@@ -184,10 +184,10 @@ interface InvestigationReport {
 
 /* ── Agent metadata ── */
 const AGENT_META: Record<string, { icon: typeof Bot; color: string; bg: string }> = {
-  triage: { icon: Shield, color: "text-blue-400", bg: "bg-blue-500/10" },
-  hunter: { icon: Crosshair, color: "text-amber-400", bg: "bg-amber-500/10" },
-  verifier: { icon: Eye, color: "text-purple-400", bg: "bg-purple-500/10" },
-  reporter: { icon: BookOpen, color: "text-emerald-400", bg: "bg-emerald-500/10" },
+  triage: { icon: Shield, color: "text-blue-600", bg: "bg-blue-500/10" },
+  hunter: { icon: Crosshair, color: "text-amber-600", bg: "bg-amber-500/10" },
+  verifier: { icon: Eye, color: "text-purple-600", bg: "bg-purple-500/10" },
+  reporter: { icon: BookOpen, color: "text-emerald-600", bg: "bg-emerald-500/10" },
 };
 
 /* ── Sample events ── */
@@ -202,7 +202,7 @@ const SAMPLE_EVENTS: Array<{
   {
     label: "Normal HTTP Traffic",
     icon: CheckCircle2,
-    color: "text-emerald-400",
+    color: "text-emerald-600",
     logType: "network",
     mode: "features",
     event: {
@@ -224,7 +224,7 @@ const SAMPLE_EVENTS: Array<{
   {
     label: "SYN Flood (DoS)",
     icon: AlertTriangle,
-    color: "text-red-400",
+    color: "text-red-600",
     logType: "network",
     mode: "features",
     event: {
@@ -246,7 +246,7 @@ const SAMPLE_EVENTS: Array<{
   {
     label: "Port Scan (Probe)",
     icon: Activity,
-    color: "text-amber-400",
+    color: "text-amber-600",
     logType: "network",
     mode: "features",
     event: {
@@ -268,7 +268,7 @@ const SAMPLE_EVENTS: Array<{
   {
     label: "Sysmon: Mimikatz (Cred Dump)",
     icon: AlertTriangle,
-    color: "text-red-400",
+    color: "text-red-600",
     logType: "sysmon",
     mode: "generic",
     event: {
@@ -287,7 +287,7 @@ const SAMPLE_EVENTS: Array<{
   {
     label: "WinSec: Failed Logon Burst",
     icon: AlertTriangle,
-    color: "text-orange-400",
+    color: "text-orange-600",
     logType: "windows_security",
     mode: "generic",
     event: {
@@ -306,7 +306,7 @@ const SAMPLE_EVENTS: Array<{
   {
     label: "SSH Brute Force (Auth)",
     icon: AlertTriangle,
-    color: "text-orange-400",
+    color: "text-orange-600",
     logType: "auth",
     mode: "generic",
     event: {
@@ -322,7 +322,7 @@ const SAMPLE_EVENTS: Array<{
   {
     label: "Firewall: Outbound C2 Port",
     icon: AlertTriangle,
-    color: "text-red-400",
+    color: "text-red-600",
     logType: "firewall",
     mode: "generic",
     event: {
@@ -369,11 +369,11 @@ function verdictLabel(v: string): string {
 
 function statusColor(s: string): string {
   switch (s) {
-    case "idle": return "text-zinc-400";
-    case "processing": return "text-amber-400";
-    case "done": return "text-emerald-400";
-    case "error": return "text-red-400";
-    default: return "text-zinc-400";
+    case "idle": return "text-zinc-500";
+    case "processing": return "text-amber-600";
+    case "done": return "text-emerald-600";
+    case "error": return "text-red-600";
+    default: return "text-zinc-500";
   }
 }
 
@@ -546,7 +546,7 @@ export default function AIAgentsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">AI Agents</h1>
+          <h1 className="text-[26px] font-bold tracking-tight">AI Agents</h1>
           <p className="text-sm text-muted-foreground">
             Autonomous investigation pipeline — ML classifier + 4-agent orchestration
           </p>
@@ -570,9 +570,9 @@ export default function AIAgentsPage() {
         <CardContent className="flex items-center gap-4 py-4">
           <div className={`rounded-full p-2 ${isOnline ? "bg-emerald-500/10" : "bg-red-500/10"}`}>
             {isOnline ? (
-              <Zap className="h-5 w-5 text-emerald-400" />
+              <Zap className="h-5 w-5 text-emerald-600" />
             ) : (
-              <XCircle className="h-5 w-5 text-red-400" />
+              <XCircle className="h-5 w-5 text-red-600" />
             )}
           </div>
           <div className="flex-1">
@@ -601,7 +601,7 @@ export default function AIAgentsPage() {
               </p>
             )}
             {!isOnline && (
-              <p className="text-xs text-red-400 mt-0.5">
+              <p className="text-xs text-red-600 mt-0.5">
                 {modelInfo?.error ??
                   "AI classifier service is not reachable — start ai_service.py"}
               </p>
@@ -657,7 +657,7 @@ export default function AIAgentsPage() {
                   const key = agent.name.toLowerCase().replace(/\s+/g, "_");
                   const meta = AGENT_META[key] ?? {
                     icon: Bot,
-                    color: "text-zinc-400",
+                    color: "text-zinc-500",
                     bg: "bg-zinc-500/10",
                   };
                   const Icon = meta.icon;
@@ -702,7 +702,7 @@ export default function AIAgentsPage() {
                           <div>
                             <p
                               className={`text-lg font-bold tabular-nums ${
-                                agent.errors > 0 ? "text-red-400" : "text-emerald-400"
+                                agent.errors > 0 ? "text-red-600" : "text-emerald-600"
                               }`}
                             >
                               {agent.errors}
@@ -719,7 +719,7 @@ export default function AIAgentsPage() {
               {/* Pipeline Architecture */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                  <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
                     <Zap className="h-4 w-4 text-primary" />
                     Investigation Pipeline
                   </CardTitle>
@@ -757,7 +757,7 @@ export default function AIAgentsPage() {
               {investigations.length > 0 && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                    <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
                       <FileText className="h-4 w-4 text-primary" />
                       Recent Investigations ({investigations.length})
                     </CardTitle>
@@ -866,7 +866,7 @@ export default function AIAgentsPage() {
             <div className="lg:col-span-2 space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                  <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
                     <Play className="h-4 w-4 text-primary" />
                     Launch Investigation
                   </CardTitle>
@@ -912,7 +912,7 @@ export default function AIAgentsPage() {
                     );
                   })}
                   {!isOnline && (
-                    <p className="text-xs text-red-400 text-center pt-1">
+                    <p className="text-xs text-red-600 text-center pt-1">
                       AI service offline
                     </p>
                   )}
@@ -923,7 +923,7 @@ export default function AIAgentsPage() {
               {pipelineProgress.length > 0 && (
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                    <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
                       <Activity className="h-4 w-4 text-primary" />
                       Pipeline Progress
                     </CardTitle>
@@ -939,11 +939,11 @@ export default function AIAgentsPage() {
                           <div key={i} className="relative flex items-center gap-3 pl-5">
                             <div className="absolute left-0">
                               {isDone ? (
-                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
                               ) : isError ? (
-                                <XCircle className="h-3.5 w-3.5 text-red-400" />
+                                <XCircle className="h-3.5 w-3.5 text-red-600" />
                               ) : isLast && investigating ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-400" />
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
                               ) : (
                                 <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground" />
                               )}
@@ -951,9 +951,9 @@ export default function AIAgentsPage() {
                             <span
                               className={`text-xs ${
                                 isDone
-                                  ? "text-emerald-400 font-medium"
+                                  ? "text-emerald-600 font-medium"
                                   : isError
-                                    ? "text-red-400"
+                                    ? "text-red-600"
                                     : isLast && investigating
                                       ? "text-foreground"
                                       : "text-muted-foreground"
@@ -987,9 +987,9 @@ export default function AIAgentsPage() {
                         <div>
                           <div className="flex items-center gap-2 mb-1">
                             {investigateResult.triage?.is_attack ? (
-                              <AlertTriangle className="h-5 w-5 text-red-400" />
+                              <AlertTriangle className="h-5 w-5 text-red-600" />
                             ) : (
-                              <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                             )}
                             <span className="font-semibold">
                               {investigateResult.report?.title ??
@@ -1051,7 +1051,7 @@ export default function AIAgentsPage() {
                           <p className="text-[9px] uppercase text-muted-foreground">
                             Confidence
                           </p>
-                          <p className="text-xs font-bold tabular-nums mt-0.5 text-emerald-400">
+                          <p className="text-xs font-bold tabular-nums mt-0.5 text-emerald-600">
                             {(
                               (investigateResult.verification?.adjusted_confidence ??
                                 investigateResult.triage?.confidence ??
@@ -1085,8 +1085,8 @@ export default function AIAgentsPage() {
                         onClick={() => toggleSection("triage")}
                       >
                         <CardHeader className="pb-2">
-                          <CardTitle className="flex items-center gap-2 text-sm font-medium">
-                            <Shield className="h-4 w-4 text-blue-400" />
+                          <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
+                            <Shield className="h-4 w-4 text-blue-600" />
                             Triage Results
                             <span className="ml-auto">
                               {expandedSections.has("triage") ? (
@@ -1130,8 +1130,8 @@ export default function AIAgentsPage() {
                         onClick={() => toggleSection("hunt")}
                       >
                         <CardHeader className="pb-2">
-                          <CardTitle className="flex items-center gap-2 text-sm font-medium">
-                            <Crosshair className="h-4 w-4 text-amber-400" />
+                          <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
+                            <Crosshair className="h-4 w-4 text-amber-600" />
                             Hunt Findings
                             <Badge variant="outline" className="ml-2 text-[10px]">
                               {investigateResult.hunt.correlated_events.length} events
@@ -1301,8 +1301,8 @@ export default function AIAgentsPage() {
                         onClick={() => toggleSection("verification")}
                       >
                         <CardHeader className="pb-2">
-                          <CardTitle className="flex items-center gap-2 text-sm font-medium">
-                            <Eye className="h-4 w-4 text-purple-400" />
+                          <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
+                            <Eye className="h-4 w-4 text-purple-600" />
                             Verification
                             <Badge
                               variant={verdictVariant(
@@ -1331,13 +1331,13 @@ export default function AIAgentsPage() {
                           {/* Check results */}
                           <div className="grid grid-cols-3 gap-2 text-center">
                             <div className="rounded border p-2">
-                              <p className="text-lg font-bold tabular-nums text-emerald-400">
+                              <p className="text-lg font-bold tabular-nums text-emerald-600">
                                 {investigateResult.verification.checks_passed}
                               </p>
                               <p className="text-[9px] text-muted-foreground">Passed</p>
                             </div>
                             <div className="rounded border p-2">
-                              <p className="text-lg font-bold tabular-nums text-red-400">
+                              <p className="text-lg font-bold tabular-nums text-red-600">
                                 {investigateResult.verification.checks_failed}
                               </p>
                               <p className="text-[9px] text-muted-foreground">Failed</p>
@@ -1365,9 +1365,9 @@ export default function AIAgentsPage() {
                                     className="flex items-start gap-2 text-xs rounded border p-2"
                                   >
                                     {check.passed ? (
-                                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 mt-0.5 shrink-0" />
+                                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 mt-0.5 shrink-0" />
                                     ) : (
-                                      <XCircle className="h-3.5 w-3.5 text-red-400 mt-0.5 shrink-0" />
+                                      <XCircle className="h-3.5 w-3.5 text-red-600 mt-0.5 shrink-0" />
                                     )}
                                     <div>
                                       <span className="font-medium">{check.check}</span>
@@ -1384,7 +1384,7 @@ export default function AIAgentsPage() {
                           {/* Recommendation */}
                           {investigateResult.verification.recommendation && (
                             <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3">
-                              <p className="text-[10px] uppercase text-blue-400 font-medium mb-1">
+                              <p className="text-[10px] uppercase text-blue-600 font-medium mb-1">
                                 Recommendation
                               </p>
                               <p className="text-xs">
@@ -1405,8 +1405,8 @@ export default function AIAgentsPage() {
                         onClick={() => toggleSection("report")}
                       >
                         <CardHeader className="pb-2">
-                          <CardTitle className="flex items-center gap-2 text-sm font-medium">
-                            <BookOpen className="h-4 w-4 text-emerald-400" />
+                          <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
+                            <BookOpen className="h-4 w-4 text-emerald-600" />
                             Investigation Report
                             <span className="ml-auto">
                               {expandedSections.has("report") ? (
@@ -1578,7 +1578,7 @@ export default function AIAgentsPage() {
                         onClick={() => toggleSection("agents")}
                       >
                         <CardHeader className="pb-2">
-                          <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                          <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
                             <Clock className="h-4 w-4 text-primary" />
                             Agent Performance
                             <span className="ml-auto">
@@ -1600,7 +1600,7 @@ export default function AIAgentsPage() {
                                 .replace(/\s+/g, "_");
                               const meta = AGENT_META[key] ?? {
                                 icon: Bot,
-                                color: "text-zinc-400",
+                                color: "text-zinc-500",
                                 bg: "bg-zinc-500/10",
                               };
                               const Icon = meta.icon;
@@ -1677,7 +1677,7 @@ export default function AIAgentsPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-2xl font-bold tabular-nums text-emerald-400">
+                    <p className="text-2xl font-bold tabular-nums text-emerald-600">
                       {pct(modelInfo?.binary_model?.accuracy ?? 0)}
                     </p>
                     <p className="text-[10px] text-muted-foreground mt-1">
@@ -1692,7 +1692,7 @@ export default function AIAgentsPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-2xl font-bold tabular-nums text-blue-400">
+                    <p className="text-2xl font-bold tabular-nums text-blue-600">
                       {pct(modelInfo?.multiclass_model?.accuracy ?? 0)}
                     </p>
                     <p className="text-[10px] text-muted-foreground mt-1">
@@ -1737,7 +1737,7 @@ export default function AIAgentsPage() {
               {/* Architecture overview */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                  <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
                     <Brain className="h-4 w-4 text-primary" />
                     Classifier Architecture
                   </CardTitle>
@@ -1747,7 +1747,7 @@ export default function AIAgentsPage() {
                     <div className="rounded-lg border p-4 space-y-2">
                       <div className="flex items-center gap-2">
                         <div className="rounded-md bg-emerald-500/10 p-1.5">
-                          <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                          <ShieldCheck className="h-4 w-4 text-emerald-600" />
                         </div>
                         <span className="text-sm font-medium">Stage 1 — Binary</span>
                       </div>
@@ -1760,7 +1760,7 @@ export default function AIAgentsPage() {
                     <div className="rounded-lg border p-4 space-y-2">
                       <div className="flex items-center gap-2">
                         <div className="rounded-md bg-blue-500/10 p-1.5">
-                          <Target className="h-4 w-4 text-blue-400" />
+                          <Target className="h-4 w-4 text-blue-600" />
                         </div>
                         <span className="text-sm font-medium">Stage 2 — Multiclass</span>
                       </div>
@@ -1775,7 +1775,7 @@ export default function AIAgentsPage() {
                     <div className="rounded-lg border p-4 space-y-2">
                       <div className="flex items-center gap-2">
                         <div className="rounded-md bg-amber-500/10 p-1.5">
-                          <AlertTriangle className="h-4 w-4 text-amber-400" />
+                          <AlertTriangle className="h-4 w-4 text-amber-600" />
                         </div>
                         <span className="text-sm font-medium">Stage 3 — Severity</span>
                       </div>
@@ -1811,8 +1811,8 @@ export default function AIAgentsPage() {
               {(["binary", "multiclass"] as const).map((task) => (
                 <Card key={task}>
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-sm font-medium">
-                      <Trophy className="h-4 w-4 text-amber-400" />
+                    <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
+                      <Trophy className="h-4 w-4 text-amber-600" />
                       {task === "binary"
                         ? "Binary Classification"
                         : "Multiclass Classification"}{" "}
@@ -1859,7 +1859,7 @@ export default function AIAgentsPage() {
                             >
                               <td className="py-2.5 pr-4 tabular-nums">
                                 {i === 0 ? (
-                                  <span className="inline-flex items-center gap-1 text-amber-400 font-semibold">
+                                  <span className="inline-flex items-center gap-1 text-amber-600 font-semibold">
                                     <Trophy className="h-3 w-3" /> 1
                                   </span>
                                 ) : (
@@ -1867,7 +1867,7 @@ export default function AIAgentsPage() {
                                 )}
                               </td>
                               <td className="py-2.5 pr-4 font-medium">{m.name}</td>
-                              <td className="py-2.5 pr-4 text-right tabular-nums text-emerald-400 font-medium">
+                              <td className="py-2.5 pr-4 text-right tabular-nums text-emerald-600 font-medium">
                                 {pct(m.test_accuracy)}
                               </td>
                               <td className="py-2.5 pr-4 text-right tabular-nums">
@@ -1880,7 +1880,7 @@ export default function AIAgentsPage() {
                                 {pct(m.test_f1)}
                               </td>
                               {task === "binary" && (
-                                <td className="py-2.5 text-right tabular-nums text-blue-400">
+                                <td className="py-2.5 text-right tabular-nums text-blue-600">
                                   {m.auc_roc != null ? pct(m.auc_roc) : "—"}
                                 </td>
                               )}
@@ -1904,7 +1904,7 @@ export default function AIAgentsPage() {
             {/* Sample events */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
                   <FlaskConical className="h-4 w-4 text-primary" />
                   Sample Events
                 </CardTitle>
@@ -1942,7 +1942,7 @@ export default function AIAgentsPage() {
                   );
                 })}
                 {!isOnline && (
-                  <p className="text-xs text-red-400 text-center pt-2">
+                  <p className="text-xs text-red-600 text-center pt-2">
                     AI service offline — start it to classify events
                   </p>
                 )}
@@ -1952,7 +1952,7 @@ export default function AIAgentsPage() {
             {/* Result panel */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
                   <ShieldCheck className="h-4 w-4 text-primary" />
                   Classification Result
                 </CardTitle>
@@ -1970,9 +1970,9 @@ export default function AIAgentsPage() {
                     >
                       <div className="flex items-center gap-2">
                         {classifyResult.is_attack ? (
-                          <AlertTriangle className="h-5 w-5 text-red-400" />
+                          <AlertTriangle className="h-5 w-5 text-red-600" />
                         ) : (
-                          <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                          <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                         )}
                         <span className="text-lg font-semibold">
                           {classifyResult.is_attack ? "Attack Detected" : "Benign Traffic"}
@@ -1995,7 +1995,7 @@ export default function AIAgentsPage() {
                         <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
                           Confidence
                         </p>
-                        <p className="text-sm font-bold mt-1 tabular-nums text-emerald-400">
+                        <p className="text-sm font-bold mt-1 tabular-nums text-emerald-600">
                           {(classifyResult.confidence * 100).toFixed(1)}%
                         </p>
                       </div>
@@ -2059,7 +2059,7 @@ export default function AIAgentsPage() {
           {classificationHistory.length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
                   <Activity className="h-4 w-4 text-primary" />
                   Classification History
                 </CardTitle>

@@ -184,7 +184,7 @@ function SearchPageInner() {
     <div className="space-y-4">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Search</h1>
+        <h1 className="text-[26px] font-bold tracking-tight">Search</h1>
         <p className="text-sm text-muted-foreground">
           Query events across all ClickHouse tables
           {aiMode && " — AI semantic search powered by LanceDB"}
@@ -304,7 +304,7 @@ function SearchPageInner() {
       {searched && (
         <Card>
           <CardHeader className="pb-0">
-            <CardTitle className="flex items-center justify-between text-sm font-medium">
+            <CardTitle className="flex items-center justify-between text-[15px] font-bold">
               <span>
                 {formatNumber(total)} results
                 {query && ` for "${query}"`}
@@ -432,9 +432,9 @@ function SearchPageInner() {
                             {aiMode && similarity[idx] !== undefined && (
                               <td className="px-4 py-2 text-center">
                                 <span className={`inline-flex rounded-sm border px-1.5 py-0.5 text-[10px] font-medium tabular-nums ${
-                                  similarity[idx] < 0.3 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
-                                  similarity[idx] < 0.6 ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
-                                  "bg-zinc-500/10 text-zinc-400 border-zinc-500/20"
+                                  similarity[idx] < 0.3 ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" :
+                                  similarity[idx] < 0.6 ? "bg-amber-500/10 text-amber-600 border-amber-500/20" :
+                                  "bg-zinc-500/10 text-zinc-500 border-zinc-500/20"
                                 }`}>
                                   {(100 - similarity[idx] * 100).toFixed(0)}%
                                 </span>

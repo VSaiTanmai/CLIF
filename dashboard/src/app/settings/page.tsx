@@ -19,7 +19,11 @@ import {
   Save,
   Trash2,
   UserPlus,
+  Sun,
+  Moon,
+  Monitor,
 } from "lucide-react";
+import { useTheme } from "@/components/theme-provider";
 import usersData from "@/lib/mock/users.json";
 import type { UserProfile } from "@/lib/types";
 import { toast } from "sonner";
@@ -28,10 +32,10 @@ const users = usersData.users as UserProfile[];
 
 const ROLE_COLORS: Record<string, string> = {
   "SOC Lead": "bg-primary/10 text-primary border-primary/20",
-  "Senior Analyst": "bg-amber-500/10 text-amber-400 border-amber-500/20",
-  Analyst: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-  Admin: "bg-purple-500/10 text-purple-400 border-purple-500/20",
-  Viewer: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
+  "Senior Analyst": "bg-amber-500/10 text-amber-600 border-amber-500/20",
+  Analyst: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+  Admin: "bg-purple-500/10 text-purple-600 border-purple-500/20",
+  Viewer: "bg-zinc-500/10 text-zinc-500 border-zinc-500/20",
 };
 
 export default function SettingsPage() {
@@ -44,6 +48,7 @@ export default function SettingsPage() {
   const abortRef = useRef<AbortController | null>(null);
   const [truncateOpen, setTruncateOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
+  const { theme, setTheme } = useTheme();
 
   useEffect(() => {
     async function probe() {
@@ -74,7 +79,7 @@ export default function SettingsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+        <h1 className="text-[26px] font-bold tracking-tight">Settings</h1>
         <p className="text-sm text-muted-foreground">
           Platform configuration, user management, and integrations
         </p>
@@ -86,7 +91,7 @@ export default function SettingsPage() {
           {/* General */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-sm font-medium">
+              <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
                 <SettingsIcon className="h-4 w-4 text-primary" />
                 General
               </CardTitle>
@@ -124,10 +129,47 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
+          {/* Appearance */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
+                <Sun className="h-4 w-4 text-primary" />
+                Appearance
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Theme</label>
+                <p className="text-[11px] text-muted-foreground mb-3">Select the interface color scheme</p>
+                <div className="grid grid-cols-3 gap-3">
+                  {([
+                    { value: "light" as const, label: "Light", icon: Sun, desc: "Clean light interface" },
+                    { value: "dark" as const, label: "Dark", icon: Moon, desc: "Dark SOC theme" },
+                    { value: "system" as const, label: "System", icon: Monitor, desc: "Follow OS setting" },
+                  ] as const).map(({ value, label, icon: Icon, desc }) => (
+                    <button
+                      key={value}
+                      onClick={() => setTheme(value)}
+                      className={`flex flex-col items-center gap-2 rounded-lg border p-4 transition-all ${
+                        theme === value
+                          ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+                          : "border-border hover:border-primary/40 hover:bg-muted/50"
+                      }`}
+                    >
+                      <Icon className={`h-5 w-5 ${theme === value ? "text-primary" : "text-muted-foreground"}`} />
+                      <span className={`text-sm font-medium ${theme === value ? "text-primary" : "text-foreground"}`}>{label}</span>
+                      <span className="text-[10px] text-muted-foreground">{desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Data Sources */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-sm font-medium">
+              <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
                 <Database className="h-4 w-4 text-primary" />
                 Data Sources
               </CardTitle>
@@ -155,7 +197,7 @@ export default function SettingsPage() {
           {/* Notifications */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-sm font-medium">
+              <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
                 <Bell className="h-4 w-4 text-primary" />
                 Notifications
               </CardTitle>
@@ -194,7 +236,7 @@ export default function SettingsPage() {
           {/* Integrations */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-sm font-medium">
+              <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
                 <Globe className="h-4 w-4 text-primary" />
                 Integrations
               </CardTitle>
@@ -235,7 +277,7 @@ export default function SettingsPage() {
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center justify-between text-sm font-medium">
+              <CardTitle className="flex items-center justify-between text-[15px] font-bold">
                 <div className="flex items-center gap-2">
                   <User className="h-4 w-4 text-primary" />
                   Users
@@ -283,7 +325,7 @@ export default function SettingsPage() {
           {/* API Keys */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-sm font-medium">
+              <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
                 <Key className="h-4 w-4 text-primary" />
                 API Keys
               </CardTitle>
@@ -316,7 +358,7 @@ export default function SettingsPage() {
           {/* Danger Zone */}
           <Card className="border-destructive/30">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-sm font-medium text-destructive">
+              <CardTitle className="flex items-center gap-2 text-[15px] font-bold text-destructive">
                 <Shield className="h-4 w-4" />
                 Danger Zone
               </CardTitle>

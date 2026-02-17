@@ -34,9 +34,9 @@ const SEVERITY_VARIANT: Record<number, "critical" | "high" | "medium" | "low" | 
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  "Open": "bg-blue-500/10 text-blue-400 border-blue-500/20",
-  "In Progress": "bg-amber-500/10 text-amber-400 border-amber-500/20",
-  "Closed": "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  "Open": "bg-blue-500/10 text-blue-600 border-blue-500/20",
+  "In Progress": "bg-amber-500/10 text-amber-600 border-amber-500/20",
+  "Closed": "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
 };
 
 // Mock timeline events for the investigation detail view
@@ -87,7 +87,7 @@ export default function InvestigationDetailPage({
                 {investigation.status}
               </span>
             </div>
-            <h1 className="mt-2 text-xl font-semibold tracking-tight">
+            <h1 className="mt-2 text-[26px] font-bold tracking-tight">
               {investigation.title}
             </h1>
           </div>
@@ -161,7 +161,7 @@ export default function InvestigationDetailPage({
         {/* Description + Tags — 2 cols */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle className="text-sm font-medium">Description</CardTitle>
+            <CardTitle className="text-[15px] font-bold">Description</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm leading-relaxed text-muted-foreground">
@@ -216,7 +216,7 @@ export default function InvestigationDetailPage({
         {/* Investigation Timeline */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-sm font-medium">
+            <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
               <Clock className="h-4 w-4 text-primary" />
               AI Investigation Timeline
             </CardTitle>

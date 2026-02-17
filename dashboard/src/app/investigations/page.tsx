@@ -23,9 +23,9 @@ import { toast } from "sonner";
 const cases = investigationsData.cases as Investigation[];
 
 const STATUS_COLORS: Record<string, string> = {
-  "Open": "bg-blue-500/10 text-blue-400 border-blue-500/20",
-  "In Progress": "bg-amber-500/10 text-amber-400 border-amber-500/20",
-  "Closed": "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  "Open": "bg-blue-500/10 text-blue-600 border-blue-500/20",
+  "In Progress": "bg-amber-500/10 text-amber-600 border-amber-500/20",
+  "Closed": "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
 };
 
 const SEVERITY_VARIANT: Record<number, "critical" | "high" | "medium" | "low" | "info"> = {
@@ -56,7 +56,7 @@ export default function InvestigationsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Investigations</h1>
+          <h1 className="text-[26px] font-bold tracking-tight">Investigations</h1>
           <p className="text-sm text-muted-foreground">
             Active and historical case files
           </p>

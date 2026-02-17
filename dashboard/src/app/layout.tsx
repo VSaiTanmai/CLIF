@@ -1,11 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { Sidebar } from "@/components/sidebar";
 import { TopBar } from "@/components/top-bar";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { KeyboardShortcutsProvider } from "@/components/keyboard-shortcuts-provider";
-import { Toaster } from "sonner";
+import { ThemeProvider, DynamicToaster } from "@/components/theme-provider";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
@@ -18,7 +17,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#09090b",
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({
@@ -27,26 +26,23 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans`}>
-        <Sidebar />
-        <div className="pl-60 transition-all duration-200">
-          <TopBar />
-          <main className="min-h-[calc(100vh-3.5rem)] p-6">
-            <ErrorBoundary>{children}</ErrorBoundary>
-          </main>
-        </div>
-        <Toaster
-          theme="dark"
-          position="bottom-right"
-          richColors
-          closeButton
-          toastOptions={{
-            duration: 5000,
-            className: "text-sm",
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("clif-theme");if(t==="dark"||(t==="system"&&matchMedia("(prefers-color-scheme:dark)").matches))document.documentElement.classList.add("dark")}catch(e){}})()`,
           }}
         />
-        <KeyboardShortcutsProvider />
+        <ThemeProvider>
+          <TopBar />
+          <div>
+            <main className="min-h-[calc(100vh-4rem)] px-6 py-6">
+              <ErrorBoundary>{children}</ErrorBoundary>
+            </main>
+          </div>
+          <DynamicToaster />
+          <KeyboardShortcutsProvider />
+        </ThemeProvider>
       </body>
     </html>
   );

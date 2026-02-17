@@ -35,9 +35,9 @@ const IOC_TYPE_ICONS: Record<string, React.ElementType> = {
 };
 
 const CONFIDENCE_COLORS: Record<string, string> = {
-  high: "text-emerald-400",
-  medium: "text-amber-400",
-  low: "text-red-400",
+  high: "text-emerald-600",
+  medium: "text-amber-600",
+  low: "text-red-600",
 };
 
 function getConfidenceLevel(score: number): string {
@@ -95,7 +95,7 @@ export default function ThreatIntelPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Threat Intelligence</h1>
+          <h1 className="text-[26px] font-bold tracking-tight">Threat Intelligence</h1>
           <p className="text-sm text-muted-foreground">
             IOC feeds, threat patterns, and MITRE ATT&CK mapping
           </p>
@@ -109,7 +109,7 @@ export default function ThreatIntelPage() {
       {liveMitre.length > 0 && (
         <Card className="border-primary/20">
           <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm font-medium">
+            <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
               <Activity className="h-4 w-4 text-primary" />
               Live MITRE ATT&CK Detections (24h)
               <Badge variant="outline" className="ml-1 tabular-nums text-[10px]">
@@ -139,8 +139,8 @@ export default function ThreatIntelPage() {
       {liveIOCs.length > 0 && (
         <Card className="border-amber-500/20">
           <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm font-medium">
-              <AlertTriangle className="h-4 w-4 text-amber-400" />
+            <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
               Active Threat Indicators (Last 24h)
               <Badge variant="high" className="ml-1 tabular-nums text-[10px]">
                 {liveIOCs.length} hosts
@@ -156,7 +156,7 @@ export default function ThreatIntelPage() {
                     <span className="font-mono text-xs">{ioc.value}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={`text-xs font-medium tabular-nums ${ioc.maxSeverity >= 3 ? "text-red-400" : "text-amber-400"}`}>
+                    <span className={`text-xs font-medium tabular-nums ${ioc.maxSeverity >= 3 ? "text-red-600" : "text-amber-600"}`}>
                       {ioc.hits} hits
                     </span>
                   </div>
@@ -177,7 +177,7 @@ export default function ThreatIntelPage() {
                   {pattern.mitre}
                 </Badge>
                 {pattern.matchedEvents > 0 && (
-                  <span className="text-[10px] font-medium text-amber-400">
+                  <span className="text-[10px] font-medium text-amber-600">
                     {pattern.matchedEvents} hits
                   </span>
                 )}
@@ -198,9 +198,9 @@ export default function ThreatIntelPage() {
       {/* IOC Table */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="flex items-center justify-between text-sm font-medium">
+            <CardTitle className="flex items-center justify-between text-[15px] font-bold">
             <div className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-400" />
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
               Indicators of Compromise
               <Badge variant="outline" className="ml-1 tabular-nums">
                 {filteredIocs.length}
@@ -305,7 +305,7 @@ export default function ThreatIntelPage() {
                         <span
                           className={`text-[11px] tabular-nums ${
                             ioc.matchedEvents > 0
-                              ? "font-medium text-amber-400"
+                              ? "font-medium text-amber-600"
                               : "text-muted-foreground"
                           }`}
                         >

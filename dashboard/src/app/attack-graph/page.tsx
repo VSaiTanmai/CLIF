@@ -38,7 +38,7 @@ const allCases = investigationsData.cases as Investigation[];
 
 function userStyle(): React.CSSProperties {
   return {
-    background: "#1e1b4b", color: "#a5b4fc", border: "1px solid #4338ca",
+    background: "#eef2ff", color: "#4338ca", border: "1px solid #818cf8",
     borderRadius: "50%", width: 90, height: 90, display: "flex",
     alignItems: "center", justifyContent: "center",
     fontSize: "11px", fontWeight: 600, fontFamily: "monospace",
@@ -46,21 +46,21 @@ function userStyle(): React.CSSProperties {
 }
 function hostStyle(): React.CSSProperties {
   return {
-    background: "#0c0a09", color: "#fbbf24", border: "1px solid #f59e0b",
+    background: "#fffbeb", color: "#b45309", border: "1px solid #f59e0b",
     borderRadius: "8px", padding: "10px",
     fontSize: "12px", fontWeight: 600, fontFamily: "monospace",
   };
 }
 function critStyle(): React.CSSProperties {
   return {
-    background: "#450a0a", color: "#fca5a5", border: "2px solid #ef4444",
+    background: "#fef2f2", color: "#b91c1c", border: "2px solid #ef4444",
     borderRadius: "8px", padding: "12px",
     fontSize: "12px", fontWeight: 700, fontFamily: "monospace",
   };
 }
 function techStyle(): React.CSSProperties {
   return {
-    background: "#0f172a", color: "#93c5fd", border: "1px dashed #3b82f6",
+    background: "#eff6ff", color: "#1d4ed8", border: "1px dashed #3b82f6",
     borderRadius: "8px", padding: "10px",
     fontSize: "10px", fontWeight: 600, fontFamily: "monospace",
     whiteSpace: "pre-line" as const,
@@ -70,7 +70,7 @@ function techStyle(): React.CSSProperties {
 function edgeBase(color: string, w = 2, animated = true): Partial<Edge> {
   return {
     style: { stroke: color, strokeWidth: w },
-    labelStyle: { fill: "#a1a1aa", fontSize: 9 },
+    labelStyle: { fill: "#6b7280", fontSize: 9 },
     markerEnd: { type: MarkerType.ArrowClosed, color },
     animated,
   };
@@ -78,7 +78,7 @@ function edgeBase(color: string, w = 2, animated = true): Partial<Edge> {
 function critEdge(label?: string): Partial<Edge> {
   return {
     ...edgeBase("#ef4444", 3), label,
-    labelStyle: { fill: "#ef4444", fontSize: 9, fontWeight: 600 },
+    labelStyle: { fill: "#dc2626", fontSize: 9, fontWeight: 600 },
   };
 }
 
@@ -301,7 +301,7 @@ function AttackGraphInner() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Attack Graph — Overview</h1>
+          <h1 className="text-[26px] font-bold tracking-tight">Attack Graph — Overview</h1>
           <p className="text-sm text-muted-foreground">
             Combined attack paths across {visible.size} of {allCases.length} investigations
           </p>
@@ -361,20 +361,20 @@ function AttackGraphInner() {
               fitView
               fitViewOptions={{ padding: 0.12 }}
               proOptions={{ hideAttribution: true }}
-              style={{ background: "hsl(0 0% 3.9%)" }}
+              style={{ background: "hsl(220 14% 96%)" }}
             >
-              <Background color="hsl(0 0% 12%)" gap={20} size={1} />
+              <Background color="hsl(215 16% 80%)" gap={20} size={1} />
               <Controls
                 style={{
-                  background: "hsl(0 0% 6%)",
-                  border: "1px solid hsl(0 0% 14%)",
+                  background: "hsl(0 0% 100%)",
+                  border: "1px solid hsl(220 13% 91%)",
                   borderRadius: "8px",
                 }}
               />
               <MiniMap
                 style={{
-                  background: "hsl(0 0% 6%)",
-                  border: "1px solid hsl(0 0% 14%)",
+                  background: "hsl(0 0% 100%)",
+                  border: "1px solid hsl(220 13% 91%)",
                   borderRadius: "8px",
                 }}
                 nodeColor={(node) => {
@@ -385,7 +385,7 @@ function AttackGraphInner() {
                   if (border.includes("#3b82f6")) return "#3b82f6";
                   return "#64748b";
                 }}
-                maskColor="rgba(0,0,0,0.7)"
+                maskColor="rgba(255,255,255,0.7)"
               />
 
               {/* Legend */}
@@ -438,7 +438,7 @@ function AttackGraphInner() {
       {selectedNode && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="flex items-center justify-between text-sm font-medium">
+            <CardTitle className="flex items-center justify-between text-[15px] font-bold">
               <span className="flex items-center gap-2">
                 <Crosshair className="h-4 w-4 text-primary" />
                 Node Details — {String(selectedNode.data?.label ?? selectedNode.id).replace(/\n/g, " ")}

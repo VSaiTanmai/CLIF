@@ -38,7 +38,7 @@ export default function ReportsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Reports</h1>
+          <h1 className="text-[26px] font-bold tracking-tight">Reports</h1>
           <p className="text-sm text-muted-foreground">
             AI-generated investigation reports and compliance documentation
           </p>
@@ -86,7 +86,7 @@ export default function ReportsPage() {
       {/* Report History */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm font-medium">
+          <CardTitle className="flex items-center gap-2 text-[15px] font-bold">
             <FileText className="h-4 w-4 text-primary" />
             Report History
           </CardTitle>
