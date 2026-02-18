@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { queryClickHouse } from "@/lib/clickhouse";
+import { cached } from "@/lib/cache";
 import { checkRateLimit, getClientId } from "@/lib/rate-limit";
 import { log } from "@/lib/logger";
+import { DEMO_MODE, demoEventsSearch } from "@/lib/demo-data";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +27,15 @@ const MAX_OFFSET = 100_000; // Prevent excessive OFFSET scans
 const RATE_LIMIT = { maxTokens: 30, refillRate: 2 };
 
 export async function GET(req: NextRequest) {
+  /* ── Demo mode — instant response ── */
+  if (DEMO_MODE) {
+    const q = req.nextUrl.searchParams.get("q") || "";
+    const t = req.nextUrl.searchParams.get("table") || "raw_logs";
+    const l = Number(req.nextUrl.searchParams.get("limit") || 50);
+    const o = Number(req.nextUrl.searchParams.get("offset") || 0);
+    return NextResponse.json(demoEventsSearch(q, t, l, o));
+  }
+
   const limited = checkRateLimit(getClientId(req), RATE_LIMIT, "/api/events/search");
   if (limited) return limited;
 
@@ -76,29 +87,34 @@ export async function GET(req: NextRequest) {
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
-    const [data, total] = await Promise.all([
-      queryClickHouse(
-        `SELECT ${columns}
-         FROM clif_logs.${safeTable}
-         ${where}
-         ORDER BY timestamp DESC
-         LIMIT {lim:UInt32} OFFSET {off:UInt32}`,
-        { ...params, lim: limit, off: offset }
-      ),
-      queryClickHouse<{ cnt: string }>(
-        `SELECT count() AS cnt
-         FROM clif_logs.${safeTable}
-         ${where}`,
-        params
-      ),
-    ]);
-
-    return NextResponse.json({
-      data: data.data,
-      total: Number(total.data[0]?.cnt ?? 0),
-      limit,
-      offset,
+    // Cache search results for 5s keyed by full query fingerprint
+    const cacheKey = `events:search:${safeTable}:${where}:${JSON.stringify(params)}:${limit}:${offset}`;
+    const result = await cached(cacheKey, 5_000, async () => {
+      const [data, total] = await Promise.all([
+        queryClickHouse(
+          `SELECT ${columns}
+           FROM clif_logs.${safeTable}
+           ${where}
+           ORDER BY timestamp DESC
+           LIMIT {lim:UInt32} OFFSET {off:UInt32}`,
+          { ...params, lim: limit, off: offset }
+        ),
+        queryClickHouse<{ cnt: string }>(
+          `SELECT count() AS cnt
+           FROM clif_logs.${safeTable}
+           ${where}`,
+          params
+        ),
+      ]);
+      return {
+        data: data.data,
+        total: Number(total.data[0]?.cnt ?? 0),
+        limit,
+        offset,
+      };
     });
+
+    return NextResponse.json(result);
   } catch (err) {
     log.error("Event search failed", { table: safeTable, error: err instanceof Error ? err.message : "unknown", component: "api/events/search" });
     return NextResponse.json(

@@ -1,16 +1,17 @@
 import { NextResponse } from "next/server";
 import { queryClickHouse } from "@/lib/clickhouse";
-import { cached } from "@/lib/cache";
+import { cached, prewarm } from "@/lib/cache";
 import { checkRateLimit, getClientId } from "@/lib/rate-limit";
 import { log } from "@/lib/logger";
+import { DEMO_MODE, demoMetrics } from "@/lib/demo-data";
 
 export const dynamic = "force-dynamic";
 
 const PROM_URL = process.env.PROMETHEUS_URL || "http://localhost:9090";
 const PROM_TIMEOUT_MS = 8_000;
 
-/** Cache TTL for dashboard metrics — balances freshness vs. query cost */
-const METRICS_CACHE_TTL_MS = 2_000;
+/** Cache TTL for dashboard metrics — 5s balances freshness vs. query cost */
+const METRICS_CACHE_TTL_MS = 5_000;
 
 async function fetchUptime(): Promise<string> {
   const controller = new AbortController();
@@ -36,6 +37,12 @@ async function fetchUptime(): Promise<string> {
 }
 
 export async function GET(request: Request) {
+  /* ── Demo mode — instant response ── */
+  if (DEMO_MODE) {
+    const { searchParams } = new URL(request.url);
+    return NextResponse.json(demoMetrics(searchParams.get("range") || "24h"));
+  }
+
   // Rate limiting
   const rateLimited = checkRateLimit(getClientId(request), { maxTokens: 30, refillRate: 2 }, "/api/metrics");
   if (rateLimited) return rateLimited;
@@ -64,24 +71,38 @@ export async function GET(request: Request) {
                (SELECT count() FROM clif_logs.network_events) AS cnt`
           ),
           queryClickHouse<{ eps: string }>(
-            `SELECT greatest(
-               ifNull((SELECT sum(event_count) / 10
-                FROM clif_logs.events_per_10s
-                WHERE ts >= now() - INTERVAL 10 SECOND), 0),
-               ifNull((SELECT sum(event_count) / greatest(10, dateDiff('second', min(ts), max(ts) + INTERVAL 10 SECOND))
-                FROM clif_logs.events_per_10s
-                WHERE ts >= now() - INTERVAL 60 SECOND), 0),
-               ifNull((SELECT max(bin_total) / 10 FROM (
-                  SELECT sum(event_count) AS bin_total
+            `SELECT
+               CASE
+                 WHEN t0 > 0 THEN t0
+                 WHEN t2 > 0 THEN t2
+                 WHEN t3 > 0 THEN t3
+                 WHEN t1 > 0 THEN t1
+                 WHEN t4 > 0 THEN t4
+                 ELSE 0
+               END AS eps
+             FROM (
+               SELECT
+                 ifNull((SELECT sum(event_count) / 60
+                  FROM clif_logs.events_per_minute
+                  WHERE minute >= now() - INTERVAL 2 MINUTE
+                    AND minute < toStartOfMinute(now())), 0) AS t0,
+                 ifNull((SELECT sum(event_count) / 10
                   FROM clif_logs.events_per_10s
-                  WHERE ts >= now() - INTERVAL 1 HOUR
-                  GROUP BY ts)), 0),
-               ifNull((SELECT coalesce(value, 0)
-                FROM clif_logs.pipeline_metrics
-                WHERE metric = 'producer_eps'
-                  AND ts >= now() - INTERVAL 5 MINUTE
-                ORDER BY ts DESC LIMIT 1), 0)
-             ) AS eps`
+                  WHERE ts >= now() - INTERVAL 10 SECOND), 0) AS t1,
+                 ifNull((SELECT sum(event_count) / greatest(10, dateDiff('second', min(ts), max(ts) + INTERVAL 10 SECOND))
+                  FROM clif_logs.events_per_10s
+                  WHERE ts >= now() - INTERVAL 60 SECOND), 0) AS t2,
+                 ifNull((SELECT avg(bin_total) / 10 FROM (
+                    SELECT sum(event_count) AS bin_total
+                    FROM clif_logs.events_per_10s
+                    WHERE ts >= now() - INTERVAL 5 MINUTE
+                    GROUP BY ts)), 0) AS t3,
+                 ifNull((SELECT coalesce(value, 0)
+                  FROM clif_logs.pipeline_metrics
+                  WHERE metric = 'producer_eps'
+                    AND ts >= now() - INTERVAL 5 MINUTE
+                  ORDER BY ts DESC LIMIT 1), 0) AS t4
+             )`
           ),
           queryClickHouse<{ cnt: string }>(
             `SELECT sum(event_count) AS cnt
@@ -301,6 +322,27 @@ export async function GET(request: Request) {
           prevAlertsQ.status === "fulfilled" ? Number(prevAlertsQ.value.data[0]?.cnt ?? 0) : 0,
       };
     });
+
+    // Pre-warm adjacent route caches in the background so page navigation feels instant.
+    // These fire-and-forget calls populate the stream/alerts caches before the user clicks.
+    prewarm("events:stream:all", 3_000, async () => {
+      const tables = ["raw_logs", "security_events", "process_events", "network_events"];
+      const cols: Record<string, string> = {
+        raw_logs: "toString(event_id) AS event_id, timestamp, source AS log_source, '' AS hostname, toNullable(toUInt8(0)) AS severity, message AS raw, 'raw_logs' AS _table",
+        security_events: "toString(event_id) AS event_id, timestamp, source AS log_source, hostname, toNullable(severity) AS severity, description AS raw, 'security_events' AS _table",
+        process_events: "toString(event_id) AS event_id, timestamp, '' AS log_source, hostname, toNullable(toUInt8(is_suspicious)) AS severity, concat(binary_path, ' ', arguments) AS raw, 'process_events' AS _table",
+        network_events: "toString(event_id) AS event_id, timestamp, protocol AS log_source, hostname, toNullable(toUInt8(is_suspicious)) AS severity, concat(IPv4NumToString(src_ip), ':', toString(src_port), ' → ', IPv4NumToString(dst_ip), ':', toString(dst_port), ' ', dns_query) AS raw, 'network_events' AS _table",
+      };
+      const results = await Promise.allSettled(
+        tables.map((t) => queryClickHouse(`SELECT ${cols[t]} FROM clif_logs.${t} PREWHERE timestamp >= today() ORDER BY timestamp DESC LIMIT 25 SETTINGS max_threads = 2, optimize_read_in_order = 1`))
+      );
+      const merged: Record<string, unknown>[] = [];
+      for (const r of results) {
+        if (r.status === "fulfilled") merged.push(...r.value.data);
+      }
+      merged.sort((a, b) => String(b.timestamp ?? "").localeCompare(String(a.timestamp ?? "")));
+      return { data: merged.slice(0, 100) };
+    }, 60_000);
 
     return NextResponse.json(data);
   } catch (err) {

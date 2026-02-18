@@ -1,0 +1,231 @@
+================================================================================
+CLIF — Known Issues & Quick Fixes Reference
+================================================================================
+Last updated: 2026-02-18
+
+────────────────────────────────────────────────────────────────────────────────
+1. DUAL PROCESS ON PORT 8200 (AI Service shadowing)
+────────────────────────────────────────────────────────────────────────────────
+SYMPTOM:  /explain returns 404, /chat returns 404, or random endpoints missing.
+          OpenAPI docs show fewer routes than expected (14 instead of 24).
+          "The AI service is currently unavailable" in the frontend.
+
+ROOT CAUSE: TWO processes listening on port 8200 — the Docker container
+            "clif-ai-classifier" AND the local uvicorn process. Requests
+            randomly hit the wrong one.
+
+DIAGNOSE:
+  Get-NetTCPConnection -LocalPort 8200 -State Listen | Select-Object OwningProcess
+  → If more than 1 OwningProcess, there's a conflict.
+
+  docker ps --format "{{.Names}}\t{{.Ports}}" | Select-String "8200"
+  → Check if clif-ai-classifier container is bound to 8200.
+
+FIX:
+  docker stop clif-ai-classifier
+  # Then verify single listener:
+  Get-NetTCPConnection -LocalPort 8200 -State Listen | Select-Object OwningProcess
+
+NOTE: Every time Docker restarts, clif-ai-classifier auto-starts and binds 8200.
+      Always stop it after docker compose up:
+        docker compose up -d; docker stop clif-ai-classifier
+
+
+────────────────────────────────────────────────────────────────────────────────
+2. DOCKER DESKTOP PIPE NOT FOUND
+────────────────────────────────────────────────────────────────────────────────
+SYMPTOM:  "open //./pipe/dockerDesktopLinuxEngine: The system cannot find the
+           file specified" when running any docker command.
+
+ROOT CAUSE: Docker Desktop GUI is open but the engine pipes haven't initialized,
+            OR the engine crashed silently.
+
+DIAGNOSE:
+  Test-Path "\\.\pipe\dockerDesktopLinuxEngine"
+  Test-Path "\\.\pipe\docker_engine"
+  → Both should be True. If False, engine isn't ready.
+
+  Get-Process *docker* | Select-Object Name, Id
+  → Docker Desktop processes exist but pipes are missing.
+
+FIX:
+  Stop-Process -Name "Docker Desktop" -Force -ErrorAction SilentlyContinue
+  Start-Sleep -Seconds 8
+  Start-Process "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+  Start-Sleep -Seconds 45
+  # Verify:
+  Test-Path "\\.\pipe\dockerDesktopLinuxEngine"
+
+NOTE: After restart, always stop clif-ai-classifier (see issue #1):
+  docker stop clif-ai-classifier
+
+
+────────────────────────────────────────────────────────────────────────────────
+3. DASHBOARD SHOWS ALL ZEROS / DATA DISAPPEARS PERIODICALLY
+────────────────────────────────────────────────────────────────────────────────
+SYMPTOM:  All KPIs show 0, no events, no alerts, empty charts.
+          Data appears briefly then resets to zeros.
+
+ROOT CAUSE (multiple possible):
+  a) ClickHouse is down (Docker not running or containers stopped).
+  b) Circuit breaker in clickhouse.ts tripped during transient failure.
+  c) Cache returns empty data after circuit breaker error.
+
+DIAGNOSE:
+  # Check ClickHouse directly:
+  Invoke-WebRequest -Uri "http://localhost:8123/ping" -UseBasicParsing -TimeoutSec 5
+  → Should return "Ok."
+
+  # Check via dashboard API:
+  $r = Invoke-WebRequest -Uri "http://localhost:3001/api/metrics?range=24h" -UseBasicParsing
+  ($r.Content | ConvertFrom-Json).totalEvents
+  → Should be > 0 (currently ~7M)
+
+  # Check ClickHouse auth (use correct credentials from .env):
+  docker exec clif-clickhouse01 clickhouse-client --user clif_admin --password "Cl1f_Ch@ngeM3_2026!" --query "SELECT count() FROM clif_logs.raw_logs"
+
+FIX:
+  - If ClickHouse down: Restart Docker (see issue #2), then docker compose up -d
+  - Circuit breaker: Reduced cooldown to 10s, threshold to 3 (from 30s/2).
+    Located in: dashboard/src/lib/clickhouse.ts
+  - Stale-while-error cache: dashboard/src/lib/cache.ts now returns expired
+    cached data when factory throws, preventing zeros.
+  - use-polling.ts: On fetch error, preserves last known good data.
+
+CREDENTIALS (from .env.local and .env):
+  CH_USER=clif_admin
+  CH_PASSWORD=Cl1f_Ch@ngeM3_2026!
+  CH_HOST=localhost
+  CH_PORT=8123
+
+
+────────────────────────────────────────────────────────────────────────────────
+4. XAI ERROR: "only length-1 arrays can be converted to Python scalars"
+────────────────────────────────────────────────────────────────────────────────
+SYMPTOM:  SHAP explanation fails with "only length-1 arrays can be converted
+          to Python scalars". top_features returns empty array.
+
+ROOT CAUSE: SHAP >=0.50 changed its API:
+  OLD: shap_values() returns List[ndarray] — one (n_samples, n_features) per class
+  NEW: shap_values() returns single ndarray of shape (n_samples, n_features, n_classes)
+
+  The code was calling float() on multi-element arrays/expected_value.
+
+FIX APPLIED in ai-agents/inference/explainer.py:
+  - Check binary_shap.ndim == 3 for new format, isinstance(list) for old
+  - Use np.asarray(expected_value).flatten() instead of direct float() cast
+  - New format indexing: binary_shap[0, :, 1] instead of binary_shap[1][0]
+  - Same fix applied to both explain() and explain_batch() methods
+
+
+────────────────────────────────────────────────────────────────────────────────
+5. XAI ERROR: "No module named 'shap'"
+────────────────────────────────────────────────────────────────────────────────
+SYMPTOM:  "XAI Error: No module named 'shap'" on the Explainability page.
+
+FIX:
+  cmd.exe /c "cd /d C:\CLIF\ai-agents && pip install shap"
+  # Then restart AI service (see issue #6 for clean restart)
+
+
+────────────────────────────────────────────────────────────────────────────────
+6. AI SERVICE CLEAN START PROCEDURE
+────────────────────────────────────────────────────────────────────────────────
+Always follow this sequence to avoid dual-process issues:
+
+  # 1. Kill ALL existing uvicorn processes
+  Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*uvicorn*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  Start-Sleep -Seconds 3
+
+  # 2. Stop the Docker AI classifier container (if Docker is running)
+  docker stop clif-ai-classifier 2>$null
+
+  # 3. Start single instance (MUST cd to ai-agents directory)
+  cmd.exe /c "cd /d C:\CLIF\ai-agents && python -m uvicorn ai_service:app --host 0.0.0.0 --port 8200"
+
+  # 4. Verify single listener
+  Get-NetTCPConnection -LocalPort 8200 -State Listen | Select-Object OwningProcess
+  → Must show exactly ONE process.
+
+NOTE: Background terminal cwd workaround — VS Code background terminals always
+start from workspace root C:\CLIF. Use cmd.exe /c "cd /d ..." or
+node -e "process.chdir(...);" to change directory.
+
+
+────────────────────────────────────────────────────────────────────────────────
+7. NEXT.JS DEV SERVER START PROCEDURE
+────────────────────────────────────────────────────────────────────────────────
+SYMPTOM:  Changes not reflected, or running stale production build.
+
+CHECK:  If running `next start` (production mode), changes won't appear until
+        rebuilt. Must use `next dev` for development.
+
+FIX:
+  # Kill existing Next.js processes
+  Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*next*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+
+  # Clear stale build cache
+  Remove-Item -Recurse -Force C:\CLIF\dashboard\.next -ErrorAction SilentlyContinue
+
+  # Start dev server (cwd workaround for VS Code background terminal)
+  node -e "process.chdir('C:/CLIF/dashboard'); require('child_process').execSync('npx next dev -p 3001', {stdio: 'inherit'})"
+
+PORT: 3001
+
+
+────────────────────────────────────────────────────────────────────────────────
+8. NAVIGATION: TOPBAR vs SIDEBAR
+────────────────────────────────────────────────────────────────────────────────
+SYMPTOM:  Added nav items to sidebar.tsx but they don't appear.
+
+ROOT CAUSE: The layout (dashboard/src/app/layout.tsx) imports TopBar, NOT Sidebar.
+            sidebar.tsx exists but is NOT used.
+
+FIX:  Edit dashboard/src/components/top-bar.tsx → NAV_SECTIONS array.
+      NOT sidebar.tsx.
+
+
+────────────────────────────────────────────────────────────────────────────────
+9. FULL SYSTEM STARTUP CHECKLIST
+────────────────────────────────────────────────────────────────────────────────
+Order matters:
+
+  1. Start Docker Desktop → wait for green whale icon (pipes ready)
+  2. docker compose up -d
+  3. docker stop clif-ai-classifier    ← CRITICAL: frees port 8200
+  4. Verify ClickHouse: curl http://localhost:8123/ping → "Ok."
+  5. Start AI service (see issue #6)
+  6. Verify: curl http://localhost:8200/health → healthy
+  7. Start Next.js dev server (see issue #7)
+  8. Verify: curl http://localhost:3001 → 200
+
+Services & Ports:
+  - ClickHouse:     8123 (HTTP), 9000 (native)
+  - Redpanda:       9092 (Kafka), 9644 (admin)
+  - MinIO:          9000/9002
+  - Prometheus:     9090
+  - Grafana:        3002
+  - AI Service:     8200 (local uvicorn, NOT Docker container)
+  - Dashboard:      3001 (Next.js dev)
+  - Ollama:         11434 (LLM - qwen3-vl:4b, qwen3:4b)
+  - LanceDB:        8100 (DO NOT START - not needed for current setup)
+
+
+────────────────────────────────────────────────────────────────────────────────
+10. CLICKHOUSE CREDENTIALS
+────────────────────────────────────────────────────────────────────────────────
+File: C:\CLIF\.env
+  CLICKHOUSE_USER=clif_admin
+  CLICKHOUSE_PASSWORD=Cl1f_Ch@ngeM3_2026!
+
+File: C:\CLIF\dashboard\.env.local
+  CH_USER=clif_admin
+  CH_PASSWORD=Cl1f_Ch@ngeM3_2026!
+
+HTTP auth uses X-ClickHouse-User / X-ClickHouse-Key headers.
+Query param auth: ?user=clif_admin&password=Cl1f_Ch@ngeM3_2026!
+
+Docker exec auth:
+  docker exec clif-clickhouse01 clickhouse-client --user clif_admin --password "Cl1f_Ch@ngeM3_2026!" --query "SELECT 1"
+
+================================================================================

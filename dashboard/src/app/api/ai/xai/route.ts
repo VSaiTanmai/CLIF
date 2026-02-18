@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
+import { DEMO_MODE, demoAiXaiStatus, demoAiXaiExplain } from "@/lib/demo-data";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://localhost:8200";
 
 /** GET — XAI/SHAP status + global feature importance */
 export async function GET() {
+  /* ── Demo mode — instant response ── */
+  if (DEMO_MODE) return NextResponse.json(demoAiXaiStatus());
+
   try {
     const [statusRes, featuresRes] = await Promise.all([
       fetch(`${AI_SERVICE_URL}/xai/status`, {
@@ -34,6 +38,9 @@ export async function GET() {
 
 /** POST — Explain a single event with SHAP */
 export async function POST(req: Request) {
+  /* ── Demo mode — instant response ── */
+  if (DEMO_MODE) return NextResponse.json(demoAiXaiExplain());
+
   try {
     const body = await req.json();
 

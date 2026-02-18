@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { DEMO_MODE, demoAiInvestigate } from "@/lib/demo-data";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://localhost:8200";
 
@@ -11,6 +12,9 @@ const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://localhost:8200";
  *  - "generic"   → /investigate/generic (any log type: Sysmon, auth, firewall…)
  */
 export async function POST(req: NextRequest) {
+  /* ── Demo mode — instant response ── */
+  if (DEMO_MODE) return NextResponse.json(demoAiInvestigate());
+
   try {
     const body = await req.json();
     const { event, mode = "features" } = body;
@@ -26,7 +30,7 @@ export async function POST(req: NextRequest) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(event),
-      signal: AbortSignal.timeout(30000), // 30s — full pipeline can take a moment
+      signal: AbortSignal.timeout(120000), // 120s — full 4-agent pipeline with Ollama can be slow
     });
 
     if (!res.ok) {

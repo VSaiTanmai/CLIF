@@ -173,7 +173,22 @@ export default function ExplainabilityPage() {
   useEffect(() => {
     fetch("/api/ai/xai")
       .then((r) => r.json())
-      .then(setStatus)
+      .then((s) => {
+        setStatus(s);
+        // Auto-trigger first explanation so page isn't empty
+        if (s?.available) {
+          setExplaining(true);
+          fetch("/api/ai/xai", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(SAMPLE_EVENTS[0].event),
+          })
+            .then((r) => r.json())
+            .then(setResult)
+            .catch(() => setResult(null))
+            .finally(() => setExplaining(false));
+        }
+      })
       .catch(() => setStatus({ available: false, error: "Service unavailable" }))
       .finally(() => setLoading(false));
   }, []);

@@ -3,17 +3,21 @@ import { queryClickHouse } from "@/lib/clickhouse";
 import { checkRateLimit, getClientId } from "@/lib/rate-limit";
 import { cached } from "@/lib/cache";
 import { log } from "@/lib/logger";
+import { DEMO_MODE, demoThreatIntel } from "@/lib/demo-data";
 
 export const dynamic = "force-dynamic";
 
 const RATE_LIMIT = { maxTokens: 20, refillRate: 1 };
 
 export async function GET(request: Request) {
+  /* ── Demo mode — instant response ── */
+  if (DEMO_MODE) return NextResponse.json(demoThreatIntel());
+
   const limited = checkRateLimit(getClientId(request), RATE_LIMIT);
   if (limited) return limited;
 
   try {
-    const data = await cached("threat-intel:dashboard", 10_000, async () => {
+    const data = await cached("threat-intel:dashboard", 15_000, async () => {
       const [mitreStats, topIOCs, recentAttacks] = await Promise.allSettled([
         // MITRE technique distribution from security_events
         queryClickHouse<{

@@ -87,7 +87,7 @@ export default function LiveFeedPage() {
     // Reset dedup set when table filter changes
     seenIdsRef.current.clear();
     fetchEvents();
-    const timer = setInterval(fetchEvents, 1000);
+    const timer = setInterval(fetchEvents, 3000);
     return () => {
       clearInterval(timer);
       abortRef.current?.abort();

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Search, Bell, X, ShieldAlert, CheckCheck, Filter, Moon, Sun } from "lucide-react";
+import { Search, Bell, X, ShieldAlert, CheckCheck, Filter, Moon, Sun, ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/components/theme-provider";
@@ -199,11 +199,8 @@ export function TopBar() {
         <div className="flex items-center gap-8">
           {/* Logo */}
           <Link href="/dashboard" className="flex items-center gap-2.5">
-            <div className="grid grid-cols-2 gap-0.5">
-              <div className="h-3.5 w-3.5 rounded-sm bg-blue-600" />
-              <div className="h-3.5 w-3.5 rounded-sm bg-blue-600" />
-              <div className="h-3.5 w-3.5 rounded-sm bg-blue-600" />
-              <div className="h-3.5 w-3.5 rounded-sm bg-blue-600" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 shadow-sm">
+              <span className="text-lg font-bold text-white">C</span>
             </div>
             <span className="text-xl font-bold tracking-tight text-foreground">
               CLIF
@@ -219,13 +216,14 @@ export function TopBar() {
                   <Link
                     href={section.items[0].href}
                     className={cn(
-                      "inline-flex items-center px-4 py-5 text-sm font-medium transition-colors border-b-2",
+                      "inline-flex items-center gap-1 px-4 py-5 text-sm font-medium transition-colors border-b-2",
                       isActive
                         ? "border-blue-600 text-blue-600"
                         : "border-transparent text-gray-500 dark:text-neutral-400 hover:text-gray-900 dark:hover:text-neutral-200 hover:border-gray-300",
                     )}
                   >
                     {section.label}
+                    <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", isActive ? "text-blue-600" : "text-gray-400")} />
                   </Link>
                   {/* Dropdown on hover */}
                   <div className="invisible absolute left-0 top-full z-50 pt-0 opacity-0 transition-all group-hover:visible group-hover:opacity-100">

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { DEMO_MODE, demoAiClassifyInfo, demoAiClassifyResult } from "@/lib/demo-data";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://localhost:8200";
 
@@ -7,6 +8,9 @@ const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://localhost:8200";
  * POST /api/ai/classify — Classify a security event
  */
 export async function GET() {
+  /* ── Demo mode — instant response ── */
+  if (DEMO_MODE) return NextResponse.json(demoAiClassifyInfo());
+
   try {
     const res = await fetch(`${AI_SERVICE_URL}/model/info`, { 
       cache: "no-store",
@@ -27,6 +31,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  /* ── Demo mode — instant response ── */
+  if (DEMO_MODE) return NextResponse.json(demoAiClassifyResult());
+
   try {
     const body = await req.json();
     const { events, mode = "features" } = body;

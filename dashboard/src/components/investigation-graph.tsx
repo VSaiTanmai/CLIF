@@ -380,7 +380,7 @@ function GraphInner({
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="h-[420px]">
+          <div className="h-[320px]">
             <ReactFlow
               nodes={nodes}
               edges={edges}

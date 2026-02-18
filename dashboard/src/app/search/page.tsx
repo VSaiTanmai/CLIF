@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import type { EventRow } from "@/lib/types";
 import { toast } from "sonner";
+import { useLogContextMenu } from "@/components/log-context-menu";
 
 const TABLES = [
   { value: "raw_logs", label: "Raw Logs" },
@@ -72,6 +73,7 @@ function SearchPageInner() {
   const aiToggledRef = useRef(false);
 
   const PAGE_SIZE = 50;
+  const { openMenu, ContextMenuPortal } = useLogContextMenu();
 
   /** Push current filters into the URL without a full navigation */
   const syncUrl = useCallback(
@@ -395,7 +397,17 @@ function SearchPageInner() {
                         results.map((row, idx) => (
                           <tr
                             key={idx}
-                            className="border-b border-border/30 transition-colors hover:bg-muted/20"
+                            className="border-b border-border/30 transition-colors hover:bg-muted/20 cursor-context-menu"
+                            onContextMenu={(e) => openMenu(e, {
+                              event_id: row.event_id as string,
+                              timestamp: row.timestamp,
+                              severity: row.severity,
+                              hostname: row.hostname,
+                              log_source: row.log_source,
+                              raw: row.raw,
+                              description: row.raw,
+                              event_type: (row.source_table as string) ?? row.log_source,
+                            })}
                           >
                             <td className="px-4 py-2 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
                               {row.timestamp
@@ -480,6 +492,7 @@ function SearchPageInner() {
           </CardContent>
         </Card>
       )}
+      {ContextMenuPortal}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { queryClickHouse, assertValidTable } from "@/lib/clickhouse";
 import { createHash } from "crypto";
 import { checkRateLimit, getClientId } from "@/lib/rate-limit";
 import { log } from "@/lib/logger";
+import { DEMO_MODE, demoEvidenceVerify } from "@/lib/demo-data";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,12 @@ function getHashExpr(table: string): string {
 }
 
 export async function GET(request: Request) {
+  /* ── Demo mode — instant response ── */
+  if (DEMO_MODE) {
+    const bid = new URL(request.url).searchParams.get("batchId") || "batch-0001";
+    return NextResponse.json(demoEvidenceVerify(bid));
+  }
+
   const limited = checkRateLimit(getClientId(request), RATE_LIMIT);
   if (limited) return limited;
 

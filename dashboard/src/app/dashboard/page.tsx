@@ -25,6 +25,7 @@ import {
   Globe,
 } from "lucide-react";
 import type { DashboardMetrics } from "@/lib/types";
+import { DEMO_MODE } from "@/lib/demo-data";
 import {
   AreaChart,
   Area,
@@ -104,6 +105,7 @@ interface Alert {
   category: string;
   description: string;
   hostname: string;
+  investigation_id?: string;
 }
 
 interface Investigation {
@@ -117,6 +119,100 @@ interface Investigation {
   verdict: string | null;
 }
 
+/* ── Demo alerts for presentation mode ── */
+const DEMO_ALERTS: Alert[] = [
+  {
+    event_id: "demo-001",
+    timestamp: new Date(Date.now() - 45_000).toISOString(),
+    severity: 4,
+    category: "Credential Dumping",
+    description: "LSASS memory access detected from unsigned process on DC-PRIMARY",
+    hostname: "DC-PRIMARY",
+    investigation_id: "inv-001",
+  },
+  {
+    event_id: "demo-002",
+    timestamp: new Date(Date.now() - 120_000).toISOString(),
+    severity: 4,
+    category: "Lateral Movement",
+    description: "PsExec service installation on WKS-FIN-042 from svc-admin account",
+    hostname: "WKS-FIN-042",
+    investigation_id: "inv-002",
+  },
+  {
+    event_id: "demo-003",
+    timestamp: new Date(Date.now() - 210_000).toISOString(),
+    severity: 3,
+    category: "Suspicious PowerShell",
+    description: "Encoded PowerShell command with network callback to external C2 IP",
+    hostname: "WKS-DEV-019",
+    investigation_id: "inv-003",
+  },
+  {
+    event_id: "demo-004",
+    timestamp: new Date(Date.now() - 340_000).toISOString(),
+    severity: 3,
+    category: "Privilege Escalation",
+    description: "Token impersonation via SeDebugPrivilege on SQL-PROD-01",
+    hostname: "SQL-PROD-01",
+    investigation_id: "inv-010",
+  },
+  {
+    event_id: "demo-005",
+    timestamp: new Date(Date.now() - 480_000).toISOString(),
+    severity: 3,
+    category: "Defense Evasion",
+    description: "Timestomping detected — PE file creation time set to 2019 on EXCH-EDGE",
+    hostname: "EXCH-EDGE",
+    investigation_id: "inv-005",
+  },
+  {
+    event_id: "demo-006",
+    timestamp: new Date(Date.now() - 550_000).toISOString(),
+    severity: 2,
+    category: "Anomalous DNS",
+    description: "High-entropy DNS queries to .xyz TLD — possible DNS tunneling",
+    hostname: "WKS-MKT-007",
+    investigation_id: "inv-007",
+  },
+  {
+    event_id: "demo-007",
+    timestamp: new Date(Date.now() - 680_000).toISOString(),
+    severity: 4,
+    category: "Ransomware Indicator",
+    description: "Mass file rename with .encrypted extension across shared drive",
+    hostname: "FS-SHARE-01",
+    investigation_id: "inv-009",
+  },
+  {
+    event_id: "demo-008",
+    timestamp: new Date(Date.now() - 780_000).toISOString(),
+    severity: 3,
+    category: "Brute Force",
+    description: "127 failed logins in 5 minutes for jthompson from 3 unique IPs",
+    hostname: "DC-PRIMARY",
+    investigation_id: "inv-006",
+  },
+  {
+    event_id: "demo-009",
+    timestamp: new Date(Date.now() - 900_000).toISOString(),
+    severity: 2,
+    category: "Data Exfiltration",
+    description: "Unusual 2.3GB upload to cloud storage bucket from backup-svc",
+    hostname: "BKP-SVR-02",
+    investigation_id: "inv-008",
+  },
+  {
+    event_id: "demo-010",
+    timestamp: new Date(Date.now() - 1_020_000).toISOString(),
+    severity: 3,
+    category: "Persistence",
+    description: "New scheduled task created with SYSTEM privileges — dropper.exe",
+    hostname: "WKS-HR-014",
+    investigation_id: "inv-004",
+  },
+];
+
 /* ── Sub-components ── */
 function KpiCard({
   icon: Icon,
@@ -129,6 +225,7 @@ function KpiCard({
   valueColor,
   trend,
   trendLabel,
+  borderAccent,
 }: {
   icon: React.ElementType;
   iconColor: string;
@@ -140,18 +237,19 @@ function KpiCard({
   valueColor?: string;
   trend?: number;
   trendLabel?: string;
+  borderAccent?: string;
 }) {
   const trendUp = (trend ?? 0) > 0;
   const trendDown = (trend ?? 0) < 0;
   return (
-    <Card className="shadow-sm border-gray-200/80 dark:border-neutral-700/80">
+    <Card className={cn("shadow-sm border-gray-200/80 dark:border-neutral-700/80 overflow-hidden", borderAccent && `border-l-4 ${borderAccent}`)}>
       <CardContent className="p-5">
         <div className="flex items-center gap-4">
           <div className={cn("rounded-xl p-3.5", iconBg)}>
             <Icon className={cn("h-6 w-6", iconColor)} />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-neutral-300">
               {title}
             </p>
             {loading ? (
@@ -183,7 +281,7 @@ function KpiCard({
                 )}
               </div>
             )}
-            <p className="text-[13px] text-gray-400">
+            <p className="text-[13px] font-medium text-gray-500 dark:text-neutral-400">
               {trendLabel || subtitle}
             </p>
           </div>
@@ -297,7 +395,7 @@ export default function DashboardPage() {
 
   const { data, loading, error } = usePolling<DashboardMetrics>(
     `/api/metrics?range=${timeRange}`,
-    2000,
+    5000,
   );
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [investigations, setInvestigations] = useState<Investigation[]>([]);
@@ -322,12 +420,14 @@ export default function DashboardPage() {
         const res = await fetch("/api/alerts", { cache: "no-store" });
         if (res.ok) {
           const json = await res.json();
-          setAlerts(
-            (json.alerts ?? []).filter((a: Alert) => a.severity >= 2),
-          );
+          let fetched = (json.alerts ?? []).filter((a: Alert) => a.severity >= 2);
+          if (DEMO_MODE && fetched.length < 5) {
+            fetched = DEMO_ALERTS;
+          }
+          setAlerts(fetched);
         }
       } catch {
-        /* silent */
+        if (DEMO_MODE) setAlerts(DEMO_ALERTS);
       }
     };
     fetchAlerts();
@@ -415,7 +515,18 @@ export default function DashboardPage() {
             Real-time threat monitoring and incident response
           </p>
         </div>
-        {/* Time Range Picker */}
+        <div className="flex items-center gap-3">
+          {/* System Status Badge */}
+          <div className="inline-flex items-center gap-2 rounded-full border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-500/10 px-3.5 py-1.5">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500" />
+            </span>
+            <span className="text-xs font-semibold text-green-700 dark:text-green-400">
+              SYSTEM STATUS: Operational
+            </span>
+          </div>
+          {/* Time Range Picker */}
         <div className="relative" ref={pickerRef}>
           <button
             onClick={() => setPickerOpen(!pickerOpen)}
@@ -447,6 +558,7 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
+        </div>
       </div>
 
       {/* ── Error Banner ── */}
@@ -476,6 +588,7 @@ export default function DashboardPage() {
           value={data ? formatNumber(data.totalEvents) : "—"}
           subtitle="All time ingested"
           loading={loading}
+          borderAccent="border-l-teal-500"
         />
         <KpiCard
           icon={TrendingUp}
@@ -486,6 +599,7 @@ export default function DashboardPage() {
           subtitle="Events per second"
           loading={loading}
           valueColor="text-green-600"
+          borderAccent="border-l-green-500"
         />
         <KpiCard
           icon={ShieldAlert}
@@ -497,6 +611,7 @@ export default function DashboardPage() {
           loading={loading}
           trend={alertTrend}
           trendLabel={`vs previous period`}
+          borderAccent="border-l-red-500"
         />
         <KpiCard
           icon={Flame}
@@ -506,20 +621,21 @@ export default function DashboardPage() {
           value={String(activeIncidents)}
           subtitle="AI investigations"
           loading={loading}
+          borderAccent="border-l-orange-500"
         />
         {/* ── NEW: Risk Score ── */}
-        <Card className="shadow-sm border-gray-200/80 dark:border-neutral-700/80">
+        <Card className="shadow-sm border-gray-200/80 dark:border-neutral-700/80 overflow-hidden border-l-4 border-l-amber-500">
           <CardContent className="p-5">
             <div className="flex items-center gap-4">
               <div className="rounded-xl p-3.5 bg-amber-50 dark:bg-amber-500/10">
                 <Gauge className="h-6 w-6 text-amber-600" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-neutral-300">
                   RISK SCORE
                 </p>
                 <RiskGauge score={riskScore} loading={loading} />
-                <p className="text-[13px] text-gray-400">
+                <p className="text-[13px] font-medium text-gray-500 dark:text-neutral-400">
                   {riskScore >= 70
                     ? "High risk posture"
                     : riskScore >= 40
@@ -546,6 +662,7 @@ export default function DashboardPage() {
                 ? "text-amber-500"
                 : "text-green-500"
           }
+          borderAccent="border-l-purple-500"
         />
       </div>
 
@@ -554,9 +671,19 @@ export default function DashboardPage() {
         {/* Events / Minute — 6 cols */}
         <Card className="shadow-sm border-gray-200/80 dark:border-neutral-700/80 lg:col-span-6">
           <CardHeader className="pb-2">
-            <CardTitle className="text-[15px] font-bold text-foreground">
-              Events / Minute
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-[15px] font-bold text-foreground">
+                Events / Minute
+              </CardTitle>
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-green-50 dark:bg-green-500/10 px-2.5 py-1">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+                </span>
+                <span className="text-[11px] font-semibold text-green-600 dark:text-green-400">LIVE</span>
+              </div>
+            </div>
+            <p className="text-xs font-medium text-gray-500 dark:text-neutral-400">Real-time ingestion traffic</p>
           </CardHeader>
           <CardContent className="pb-4">
             {loading || timelineData.length === 0 ? (
@@ -620,6 +747,7 @@ export default function DashboardPage() {
             <CardTitle className="text-[15px] font-bold text-foreground">
               Severity ({selectedLabel.replace("Last ", "")})
             </CardTitle>
+            <p className="text-xs font-medium text-gray-500 dark:text-neutral-400">Alerts by severity level</p>
           </CardHeader>
           <CardContent className="pb-4">
             {loading || severityData.length === 0 ? (
@@ -669,12 +797,15 @@ export default function DashboardPage() {
         <Card className="shadow-sm border-gray-200/80 dark:border-neutral-700/80 lg:col-span-3">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-[15px] font-bold text-foreground">
-                Live Alerts
-              </CardTitle>
+              <div>
+                <CardTitle className="text-[15px] font-bold text-foreground">
+                  Live Alerts
+                </CardTitle>
+                <p className="text-xs font-medium text-gray-500 dark:text-neutral-400">Real-time threat detection</p>
+              </div>
               {alerts.length > 0 && (
-                <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-red-500 px-2 text-[11px] font-bold text-white">
-                  {alerts.length > 99 ? "99+" : alerts.length}
+                <span className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2.5 py-1 text-[11px] font-bold text-white">
+                  {alerts.length > 99 ? "99+" : alerts.length} New
                 </span>
               )}
             </div>
@@ -689,7 +820,22 @@ export default function DashboardPage() {
                 alerts.slice(0, 10).map((a, i) => (
                   <div
                     key={a.event_id || i}
-                    className="rounded-lg border border-gray-100 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-3 shadow-xs cursor-context-menu"
+                    className={cn(
+                      "rounded-lg border p-3 shadow-xs cursor-context-menu transition-colors overflow-hidden",
+                      a.severity >= 4
+                        ? "border-l-4 border-l-red-500 border-t-gray-100 border-r-gray-100 border-b-gray-100 dark:border-t-neutral-700 dark:border-r-neutral-700 dark:border-b-neutral-700"
+                        : a.severity >= 3
+                          ? "border-l-4 border-l-orange-500 border-t-gray-100 border-r-gray-100 border-b-gray-100 dark:border-t-neutral-700 dark:border-r-neutral-700 dark:border-b-neutral-700"
+                          : "border-l-4 border-l-amber-400 border-t-gray-100 border-r-gray-100 border-b-gray-100 dark:border-t-neutral-700 dark:border-r-neutral-700 dark:border-b-neutral-700",
+                    )}
+                    style={{
+                      background:
+                        a.severity >= 4
+                          ? "linear-gradient(to right, rgba(239,68,68,0.08) 0%, rgba(239,68,68,0.02) 40%, transparent 100%)"
+                          : a.severity >= 3
+                            ? "linear-gradient(to right, rgba(249,115,22,0.08) 0%, rgba(249,115,22,0.02) 40%, transparent 100%)"
+                            : "linear-gradient(to right, rgba(251,191,36,0.08) 0%, rgba(251,191,36,0.02) 40%, transparent 100%)",
+                    }}
                     onContextMenu={(e) => openMenu(e, {
                       event_id: a.event_id,
                       timestamp: a.timestamp,
@@ -698,7 +844,7 @@ export default function DashboardPage() {
                       description: a.description,
                       hostname: a.hostname,
                       event_type: a.category,
-                    })}
+                    }, a.investigation_id)}
                   >
                     <div className="mb-1 flex items-center gap-2">
                       <Badge
@@ -730,13 +876,13 @@ export default function DashboardPage() {
       {/* ── Bottom Row: MITRE Heatmap | Risky Entities | Recent Investigations ── */}
       <div className="grid gap-4 grid-cols-1 lg:grid-cols-12">
         {/* MITRE ATT&CK — 3 cols */}
-        <Card className="shadow-sm border-gray-200/80 dark:border-neutral-700/80 lg:col-span-3">
+        <Card className="shadow-sm border-gray-200/80 dark:border-neutral-700/80 lg:col-span-3 overflow-hidden border-l-4 border-l-red-400">
           <CardHeader className="pb-1">
             <div className="flex items-center justify-between">
               <CardTitle className="text-[15px] font-bold text-foreground">
                 MITRE ATT&CK
               </CardTitle>
-              <span className="text-[10px] font-medium text-gray-400 dark:text-neutral-500">
+              <span className="text-[10px] font-semibold text-gray-500 dark:text-neutral-400">
                 {tacticHeatmap.length} tactics
               </span>
             </div>
@@ -792,13 +938,13 @@ export default function DashboardPage() {
         </Card>
 
         {/* Risky Entities — 3 cols */}
-        <Card className="shadow-sm border-gray-200/80 dark:border-neutral-700/80 lg:col-span-3">
+        <Card className="shadow-sm border-gray-200/80 dark:border-neutral-700/80 lg:col-span-3 overflow-hidden border-l-4 border-l-violet-400">
           <CardHeader className="pb-1">
             <div className="flex items-center justify-between">
               <CardTitle className="text-[15px] font-bold text-foreground">
                 Risky Entities
               </CardTitle>
-              <span className="text-[10px] font-medium text-gray-400 dark:text-neutral-500">
+              <span className="text-[10px] font-semibold text-gray-500 dark:text-neutral-400">
                 by risk score
               </span>
             </div>
@@ -867,7 +1013,7 @@ export default function DashboardPage() {
         </Card>
 
         {/* Recent Investigations — 6 cols */}
-        <Card className="shadow-sm border-gray-200/80 dark:border-neutral-700/80 lg:col-span-6">
+        <Card className="shadow-sm border-gray-200/80 dark:border-neutral-700/80 lg:col-span-6 overflow-hidden border-l-4 border-l-blue-400">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-[15px] font-bold text-foreground">

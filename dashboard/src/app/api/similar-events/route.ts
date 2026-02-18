@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getClientId } from "@/lib/rate-limit";
 import { log } from "@/lib/logger";
+import { DEMO_MODE, demoSemanticSearch } from "@/lib/demo-data";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,9 @@ const RATE_LIMIT = { maxTokens: 20, refillRate: 2 };
 
 /** Find events similar to a given event_id using LanceDB vector similarity */
 export async function POST(req: NextRequest) {
+  /* ── Demo mode — instant response ── */
+  if (DEMO_MODE) return NextResponse.json(demoSemanticSearch("similar"));
+
   const limited = checkRateLimit(getClientId(req), RATE_LIMIT);
   if (limited) return limited;
 
