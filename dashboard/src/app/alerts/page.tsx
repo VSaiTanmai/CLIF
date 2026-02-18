@@ -24,6 +24,7 @@ import {
   User,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useLogContextMenu } from "@/components/log-context-menu";
 
 interface AlertData {
   summary: Array<{ severity: number; count: number }>;
@@ -66,6 +67,7 @@ export default function AlertsPage() {
     action: "Acknowledged",
     open: false,
   });
+  const { openMenu, ContextMenuPortal } = useLogContextMenu();
   /** Track overridden workflow states (key = stringified alert index from raw data) */
   const [stateOverrides, setStateOverrides] = useState<Record<number, WorkflowState>>({});
 
@@ -398,6 +400,16 @@ export default function AlertsPage() {
                       className={`flex items-start gap-3 px-4 py-3 transition-colors hover:bg-muted/20 cursor-pointer ${
                         selectedAlert === idx ? "bg-muted/30" : ""
                       } ${isSelected ? "bg-primary/5" : ""}`}
+                      onContextMenu={(e) => openMenu(e, {
+                        event_id: (alert as Record<string, unknown>).event_id as string,
+                        timestamp: alert.timestamp,
+                        severity: alert.severity,
+                        hostname: alert.hostname,
+                        log_source: alert.log_source,
+                        raw: alert.raw,
+                        event_type: alert.event_type ?? "alert",
+                        category: alert.event_type,
+                      })}
                     >
                       {/* Checkbox */}
                       <button
@@ -484,6 +496,7 @@ export default function AlertsPage() {
         confirmLabel={`${bulkAction.action} ${selectedIds.size} alerts`}
         onConfirm={() => handleBulkAction(bulkAction.action)}
       />
+      {ContextMenuPortal}
     </div>
   );
 }

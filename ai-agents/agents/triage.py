@@ -274,6 +274,7 @@ class TriageAgent(BaseAgent):
         )
 
         # -- Step 4: Build TriageData -----------------------------------------
+        xai = result.get("xai", {})
         triage = TriageData(
             is_attack=result.get("is_attack", False),
             confidence=result.get("confidence", 0.0),
@@ -290,6 +291,14 @@ class TriageAgent(BaseAgent):
             log_type=log_type.value,
             classifier_used=classifier_name,
             matched_rules=result.get("matched_rules", []),
+            # XAI / SHAP data (populated when ML classifier is used)
+            xai_available=bool(xai),
+            xai_top_features=xai.get("top_features", []),
+            xai_prediction_drivers=xai.get("prediction_drivers", ""),
+            xai_waterfall=xai.get("waterfall", {}),
+            xai_category_attribution=xai.get("category_attribution", {}),
+            xai_model_type=xai.get("model_type", ""),
+            xai_feature_contributions=xai.get("feature_contributions", {}),
         )
 
         ctx.triage = triage

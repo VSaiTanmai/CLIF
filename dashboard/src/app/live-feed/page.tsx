@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { severityLabel, severityBgColor, timeAgo, formatNumber } from "@/lib/utils";
 import { Radio, Pause, Play, ArrowDown, Filter, RotateCcw, Database, AlertTriangle } from "lucide-react";
 import type { EventRow } from "@/lib/types";
+import { useLogContextMenu } from "@/components/log-context-menu";
 
 const MAX_ROWS = 2000;
 
@@ -35,6 +36,7 @@ export default function LiveFeedPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const rateCountRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
+  const { openMenu, ContextMenuPortal } = useLogContextMenu();
   /** Track latest seen event_id to deduplicate across polls */
   const seenIdsRef = useRef(new Set<string>());
 
@@ -274,7 +276,16 @@ export default function LiveFeedPage() {
                   filtered.slice(0, 500).map((event, idx) => (
                     <tr
                       key={idx}
-                      className="border-b border-border/30 transition-colors hover:bg-muted/30"
+                      className="border-b border-border/30 transition-colors hover:bg-muted/30 cursor-context-menu"
+                      onContextMenu={(e) => openMenu(e, {
+                        event_id: (event as Record<string, unknown>).event_id as string,
+                        timestamp: event.timestamp,
+                        severity: event.severity,
+                        hostname: event.hostname,
+                        log_source: event.log_source,
+                        raw: event.raw,
+                        event_type: event._table ?? "raw_log",
+                      })}
                     >
                       <td className="px-4 py-1.5 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
                         {event.timestamp
@@ -325,6 +336,7 @@ export default function LiveFeedPage() {
           </div>
         </CardContent>
       </Card>
+      {ContextMenuPortal}
     </div>
   );
 }

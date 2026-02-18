@@ -14,11 +14,14 @@ Usage:
 
 import os
 import json
+import logging
 import numpy as np
 import pandas as pd
 import joblib
 from pathlib import Path
 from typing import Dict, Any, Optional, List
+
+logger = logging.getLogger("clif.inference")
 
 
 class CLIFClassifier:
@@ -59,12 +62,42 @@ class CLIFClassifier:
         # Pre-compute category names
         self.class_names = list(self.label_encoder.classes_)
 
+        # ── XAI / SHAP Explainer (lazy init) ────────────────────────────
+        self._explainer = None
+        self._xai_available = False
+        self._init_explainer()
+
         print(f"[CLIF-ML] Models loaded from {self.model_dir}")
         print(f"  Binary:     {self.config['binary_model']['name']} "
               f"(acc={self.config['binary_model']['accuracy']:.4f})")
         print(f"  Multiclass: {self.config['multiclass_model']['name']} "
               f"(acc={self.config['multiclass_model']['accuracy']:.4f})")
         print(f"  Features:   {len(self.encoded_features)} total")
+        print(f"  XAI:        {'SHAP TreeExplainer ready' if self._xai_available else 'unavailable'}")
+
+    def _init_explainer(self):
+        """Initialize the SHAP-based XAI explainer."""
+        try:
+            from inference.explainer import CLIFExplainer
+            self._explainer = CLIFExplainer(
+                binary_model=self.binary_model,
+                multi_model=self.multi_model,
+                feature_names=self.encoded_features,
+                top_k=10,
+            )
+            self._xai_available = True
+            logger.info("[CLIF-ML] XAI explainer initialized (SHAP TreeExplainer)")
+        except ImportError:
+            logger.warning("[CLIF-ML] SHAP not installed — XAI disabled. pip install shap")
+            self._xai_available = False
+        except Exception as e:
+            logger.warning("[CLIF-ML] XAI init failed: %s — explanations disabled", e)
+            self._xai_available = False
+
+    @property
+    def xai_available(self) -> bool:
+        """Whether SHAP-based XAI explanations are available."""
+        return self._xai_available and self._explainer is not None
 
     def _preprocess_event(self, event: Dict[str, Any]) -> np.ndarray:
         """
@@ -173,7 +206,17 @@ class CLIFClassifier:
             is_attack, category, confidence, category_confidence, event, severity
         )
 
-        return {
+        # ── XAI: SHAP feature attribution ────────────────────────────
+        xai_data = {}
+        if self._xai_available and self._explainer is not None:
+            try:
+                xai_data = self._explainer.explain(
+                    X, is_attack, category, self.class_names, event
+                )
+            except Exception as e:
+                logger.warning("[CLIF-ML] XAI explanation failed: %s", e)
+
+        result = {
             'is_attack': is_attack,
             'confidence': round(confidence, 4),
             'category': category,
@@ -186,6 +229,12 @@ class CLIFClassifier:
             'multi_probs': {self.class_names[i]: round(float(multi_prob[i]), 4)
                             for i in range(len(self.class_names))},
         }
+
+        # Attach XAI data if available
+        if xai_data:
+            result['xai'] = xai_data
+
+        return result
 
     def classify_batch(self, events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
@@ -322,9 +371,34 @@ class CLIFClassifier:
 
         return explanation
 
+    def explain_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate a standalone SHAP explanation for an event.
+
+        Classifies the event and returns both classification + full XAI data.
+        Useful for the dedicated /explain endpoint.
+        """
+        result = self.classify(event)
+        if 'xai' not in result and self._xai_available:
+            X = self._preprocess_event(event)
+            try:
+                result['xai'] = self._explainer.explain(
+                    X, result['is_attack'], result['category'],
+                    self.class_names, event
+                )
+            except Exception as e:
+                result['xai'] = {'error': str(e)}
+        return result
+
+    def get_global_feature_importance(self) -> List[Dict[str, Any]]:
+        """Return global feature importance from the model."""
+        if self._xai_available and self._explainer is not None:
+            return self._explainer.get_global_importance()
+        return []
+
     def get_model_info(self) -> Dict[str, Any]:
         """Return model metadata for monitoring/dashboard."""
-        return {
+        info = {
             'version': self.config.get('version', 'unknown'),
             'dataset': self.config.get('dataset', 'unknown'),
             'created': self.config.get('created', 'unknown'),
@@ -341,7 +415,13 @@ class CLIFClassifier:
             },
             'feature_count': len(self.encoded_features),
             'clif_categories': self.clif_category_map,
+            'xai': {
+                'available': self._xai_available,
+                'explainer_type': 'SHAP TreeExplainer' if self._xai_available else None,
+                'top_k': self._explainer.top_k if self._explainer else None,
+            },
         }
+        return info
 
 
 def map_clif_event_to_features(clif_event: Dict[str, Any]) -> Dict[str, Any]:

@@ -68,6 +68,7 @@ class Orchestrator:
         self.reporter_agent = ReporterAgent()
 
         self._investigations: List[Dict[str, Any]] = []
+        self._full_investigations: Dict[str, Dict[str, Any]] = {}  # keyed by investigation_id
 
         # ── DSPy/LLM initialisation ─────────────────────────────────
         llm_ok = configure_llm(model=ollama_model, base_url=ollama_base_url)
@@ -101,6 +102,11 @@ class Orchestrator:
     def get_recent_investigations(self, limit: int = 20) -> List[Dict[str, Any]]:
         """Return recent investigation summaries."""
         return self._investigations[-limit:][::-1]
+
+    def get_investigation_by_id(self, investigation_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve a full investigation context by ID from history."""
+        result = self._full_investigations.get(investigation_id)
+        return result
 
     async def investigate(
         self,
@@ -189,7 +195,7 @@ class Orchestrator:
         return await self.investigate(event, source="api", full_pipeline=False)
 
     def _record(self, ctx: InvestigationContext):
-        """Store investigation summary in memory (last 100)."""
+        """Store investigation summary + full context in memory (last 100)."""
         summary = {
             "investigation_id": ctx.investigation_id,
             "created_at": ctx.created_at,
@@ -212,6 +218,14 @@ class Orchestrator:
         self._investigations.append(summary)
         if len(self._investigations) > 100:
             self._investigations = self._investigations[-100:]
+
+        # Store full serialised result
+        self._full_investigations[ctx.investigation_id] = self._serialise(ctx)
+        # Cap full storage at 100
+        if len(self._full_investigations) > 100:
+            oldest_keys = list(self._full_investigations.keys())[:-100]
+            for k in oldest_keys:
+                del self._full_investigations[k]
 
     def _serialise(self, ctx: InvestigationContext) -> Dict[str, Any]:
         """Convert InvestigationContext to a JSON-serialisable dict."""

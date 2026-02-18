@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from .base import (
     BaseAgent,
@@ -336,6 +336,12 @@ class ReporterAgent(BaseAgent):
                 bar = "█" * int(prob * 20) + "░" * (20 - int(prob * 20))
                 lines.append(f"  {cls:8s} {bar} {prob:.1%}")
 
+        # XAI / SHAP attribution summary
+        if triage.xai_available and triage.xai_prediction_drivers:
+            lines.append("")
+            lines.append("─── Explainable AI (SHAP) ───")
+            lines.append(triage.xai_prediction_drivers)
+
         return ReportSection(title="Triage Analysis", content="\n".join(lines))
 
     def _build_hunt_section(self, ctx: InvestigationContext) -> ReportSection:
@@ -463,6 +469,70 @@ class ReporterAgent(BaseAgent):
 
         return unique
 
+    def _build_xai_section(self, ctx: InvestigationContext) -> Optional[ReportSection]:
+        """Build an Explainable AI section with SHAP feature attribution."""
+        triage = ctx.triage
+        if not triage or not triage.xai_available or not triage.xai_top_features:
+            return None
+
+        lines = [
+            "Explainable AI (XAI) — SHAP Feature Attribution",
+            "=" * 50,
+            "",
+            f"Model: {triage.xai_model_type.title()} classifier",
+            f"Explainer: SHAP TreeExplainer (exact values)",
+            "",
+        ]
+
+        # Prediction drivers summary
+        if triage.xai_prediction_drivers:
+            lines.append("Prediction Reasoning:")
+            lines.append(f"  {triage.xai_prediction_drivers}")
+            lines.append("")
+
+        # Top feature contributions table
+        lines.append(f"Top Feature Contributions (SHAP values):")
+        lines.append(f"  {'#':>3s}  {'Feature':<30s}  {'SHAP Value':>12s}  {'Impact':<10s}  {'Category':<20s}")
+        lines.append(f"  {'─' * 3}  {'─' * 30}  {'─' * 12}  {'─' * 10}  {'─' * 20}")
+
+        for i, feat in enumerate(triage.xai_top_features[:10], 1):
+            name = feat.get("display_name", feat.get("feature", "?"))[:30]
+            sv = feat.get("shap_value", 0)
+            impact = "▲ positive" if sv > 0 else "▼ negative"
+            cat = feat.get("category", "other")
+            sv_str = f"{sv:+.6f}"
+            lines.append(f"  {i:3d}  {name:<30s}  {sv_str:>12s}  {impact:<10s}  {cat:<20s}")
+
+        lines.append("")
+
+        # Category-level attribution
+        if triage.xai_category_attribution:
+            lines.append("Feature Category Attribution (absolute SHAP):")
+            total = sum(triage.xai_category_attribution.values()) or 1.0
+            for cat_name, value in triage.xai_category_attribution.items():
+                pct = (value / total) * 100
+                bar = "█" * int(pct / 5) + "░" * (20 - int(pct / 5))
+                lines.append(f"  {cat_name:<25s} {bar} {pct:.1f}%")
+            lines.append("")
+
+        # Waterfall summary
+        wf = triage.xai_waterfall
+        if wf and wf.get("base_value") is not None:
+            lines.append("Decision Waterfall:")
+            lines.append(f"  Base value (model average): {wf['base_value']:.6f}")
+            if wf.get("features"):
+                for wf_feat in wf["features"]:
+                    val = wf_feat.get("value", 0)
+                    sign = "+" if val >= 0 else ""
+                    lines.append(f"    {sign}{val:.6f}  {wf_feat.get('feature', '?')}")
+            lines.append(f"  ──────────────────────────────")
+            lines.append(f"  Output value: {wf.get('output_value', 0):.6f}")
+
+        return ReportSection(
+            title="Explainable AI (XAI) — SHAP Analysis",
+            content="\n".join(lines),
+        )
+
     def _build_timeline(self, ctx: InvestigationContext) -> List[Dict[str, str]]:
         timeline: List[Dict[str, str]] = []
 
@@ -505,6 +575,11 @@ class ReporterAgent(BaseAgent):
             self._build_hunt_section(ctx),
             self._build_verification_section(ctx),
         ]
+
+        # ── XAI / Explainability section ─────────────────────────────
+        xai_section = self._build_xai_section(ctx)
+        if xai_section:
+            sections.append(xai_section)
 
         # ── MITRE mapping ────────────────────────────────────────────
         mitre_mapping = self._build_mitre_mapping(ctx)

@@ -80,6 +80,14 @@ class TriageData:
     log_type: str = "network"          # network, sysmon, windows_security, auth, firewall, generic
     classifier_used: str = "ml"        # ml, sysmon_rules, winsec_rules, auth_rules, fw_rules, heuristic
     matched_rules: List[str] = field(default_factory=list)  # rule names that triggered (non-ML)
+    # XAI / SHAP explainability data
+    xai_available: bool = False
+    xai_top_features: List[Dict[str, Any]] = field(default_factory=list)
+    xai_prediction_drivers: str = ""
+    xai_waterfall: Dict[str, Any] = field(default_factory=dict)
+    xai_category_attribution: Dict[str, float] = field(default_factory=dict)
+    xai_model_type: str = ""           # "binary" or "multiclass"
+    xai_feature_contributions: Dict[str, float] = field(default_factory=dict)
 
 
 @dataclass

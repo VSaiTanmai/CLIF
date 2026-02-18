@@ -19,6 +19,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Shield,
+  BrainCircuit,
+  MessageSquare,
 } from "lucide-react";
 import {
   Tooltip,
@@ -49,6 +51,8 @@ const NAV_SECTIONS = [
     items: [
       { href: "/threat-intel", label: "Threat Intel", icon: Radar },
       { href: "/ai-agents", label: "AI Agents", icon: Bot },
+      { href: "/explainability", label: "Explainability", icon: BrainCircuit },
+      { href: "/chat", label: "CLIF AI Chat", icon: MessageSquare },
     ],
   },
   {

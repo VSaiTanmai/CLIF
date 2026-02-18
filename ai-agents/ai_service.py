@@ -3,15 +3,21 @@
 Exposes HTTP endpoints for ML classification and AI agent investigation pipeline.
 
 Endpoints:
-  POST /classify              - Classify a single event
+  POST /classify              - Classify a single event (with XAI)
   POST /classify/batch        - Classify multiple events
+  POST /explain               - Full SHAP-based XAI explanation
+  POST /explain/clif          - SHAP explanation for CLIF events
   POST /investigate           - Full 4-agent investigation pipeline
   POST /investigate/triage    - Quick triage only
+  POST /chat                  - Chat with CLIF AI (Ollama qwen)
   GET  /agents/status         - All agent statuses
   GET  /agents/investigations - Recent investigation history
+  GET  /agents/investigations/{id} - Get specific investigation detail
   GET  /health                - Health check
   GET  /model/info            - Model metadata
+  GET  /model/features        - Global feature importance
   GET  /model/leaderboard     - Training leaderboard
+  GET  /xai/status            - XAI/SHAP integration status
 
 Run:
   uvicorn ai_service:app --host 0.0.0.0 --port 8200 --workers 2
@@ -131,6 +137,38 @@ class CLIFEvent(BaseModel):
     is_host_login: bool = False
     is_guest_login: bool = False
 
+class XAIFeature(BaseModel):
+    """A single SHAP feature attribution."""
+    feature: str
+    display_name: str
+    shap_value: float
+    abs_shap_value: float = 0.0
+    feature_value: Optional[float] = None
+    raw_value: Optional[Any] = None
+    impact: str = "positive"  # positive or negative
+    category: str = "other"
+
+
+class XAIWaterfall(BaseModel):
+    """Waterfall data showing base value → prediction."""
+    base_value: float = 0.0
+    output_value: float = 0.0
+    features: List[Dict[str, Any]] = []
+
+
+class XAIData(BaseModel):
+    """Explainable AI data from SHAP analysis."""
+    top_features: List[XAIFeature] = []
+    feature_contributions: Optional[Dict[str, float]] = None
+    waterfall: Optional[XAIWaterfall] = None
+    prediction_drivers: str = ""
+    category_attribution: Optional[Dict[str, float]] = None
+    model_type: str = ""
+    explainer_type: str = "SHAP TreeExplainer"
+    top_k: int = 10
+    error: Optional[str] = None
+
+
 class ClassifyResponse(BaseModel):
     is_attack: bool
     confidence: float
@@ -141,6 +179,7 @@ class ClassifyResponse(BaseModel):
     explanation: str
     binary_probs: Optional[Dict[str, float]] = None
     multi_probs: Optional[Dict[str, float]] = None
+    xai: Optional[XAIData] = None
 
 class BatchClassifyRequest(BaseModel):
     events: List[EventFeatures]
@@ -276,12 +315,16 @@ async def model_leaderboard():
 
 @app.post("/classify", response_model=ClassifyResponse)
 async def classify_event(event: EventFeatures):
-    """Classify a single event using NSL-KDD features."""
+    """Classify a single event using NSL-KDD features.
+
+    Returns classification with SHAP-based XAI feature attribution
+    when the SHAP explainer is available.
+    """
     if not classifier:
         raise HTTPException(status_code=503, detail="Model not loaded")
 
     result = classifier.classify(event.model_dump())
-    return ClassifyResponse(**result)
+    return result
 
 
 @app.post("/classify/clif", response_model=ClassifyResponse)
@@ -331,6 +374,76 @@ async def classify_clif_batch(request: BatchCLIFRequest):
         latency_ms=round(latency, 2),
     )
 
+# ── XAI / Explainability Endpoints ────────────────────────────────────────────
+
+@app.post("/explain")
+async def explain_event(event: EventFeatures):
+    """Classify + generate full SHAP-based XAI explanation for a single event.
+
+    Returns classification result with detailed SHAP feature attribution,
+    waterfall data for visualization, and human-readable prediction drivers.
+    """
+    if not classifier:
+        raise HTTPException(status_code=503, detail="Model not loaded")
+    if not classifier.xai_available:
+        raise HTTPException(
+            status_code=501,
+            detail="XAI unavailable — SHAP not installed. pip install shap",
+        )
+
+    result = classifier.explain_event(event.model_dump())
+    return result
+
+
+@app.post("/explain/clif")
+async def explain_clif_event(event: CLIFEvent):
+    """Explain a CLIF pipeline event with SHAP attribution."""
+    if not classifier:
+        raise HTTPException(status_code=503, detail="Model not loaded")
+    if not classifier.xai_available:
+        raise HTTPException(status_code=501, detail="XAI unavailable")
+
+    features = map_clif_event_to_features(event.model_dump())
+    result = classifier.explain_event(features)
+    return result
+
+
+@app.get("/model/features")
+async def model_feature_importance():
+    """Return global feature importance from the model (Gini importance).
+
+    Useful for understanding which features the model considers most
+    important across all predictions.
+    """
+    if not classifier:
+        raise HTTPException(status_code=503, detail="Model not loaded")
+
+    importance = classifier.get_global_feature_importance()
+    return {
+        "features": importance,
+        "total_features": len(classifier.encoded_features),
+        "xai_available": classifier.xai_available,
+    }
+
+
+@app.get("/xai/status")
+async def xai_status():
+    """Return XAI/SHAP integration status."""
+    if not classifier:
+        return {
+            "available": False,
+            "reason": "ML classifier not loaded",
+        }
+    return {
+        "available": classifier.xai_available,
+        "explainer_type": "SHAP TreeExplainer" if classifier.xai_available else None,
+        "feature_count": len(classifier.encoded_features),
+        "top_k": classifier._explainer.top_k if classifier._explainer else None,
+        "model_types": {
+            "binary": classifier.config['binary_model']['name'],
+            "multiclass": classifier.config['multiclass_model']['name'],
+        },
+    }
 
 # ── Agent Endpoints ─────────────────────────────────────────────────────────
 
@@ -405,6 +518,163 @@ async def recent_investigations(limit: int = 20):
     return {
         "investigations": orchestrator.get_recent_investigations(limit),
     }
+
+
+@app.get("/agents/investigations/{investigation_id}")
+async def get_investigation(investigation_id: str):
+    """Retrieve a specific investigation's full context by ID."""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Orchestrator not loaded")
+    result = orchestrator.get_investigation_by_id(investigation_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    return result
+
+
+# ── Chat Endpoint ───────────────────────────────────────────────────────────
+
+class ChatMessage(BaseModel):
+    role: str  # "user" or "assistant"
+    content: str
+
+class ChatRequest(BaseModel):
+    messages: List[ChatMessage]
+    context: Optional[Dict[str, Any]] = None  # optional: event / log for context
+
+
+@app.post("/chat")
+async def chat(request: ChatRequest):
+    """Chat with the CLIF AI assistant using the local Ollama LLM.
+
+    If LLM is unavailable, returns a helpful fallback response
+    explaining what CLIF can do without LLM.
+    """
+    from agents.llm import is_llm_available, OLLAMA_BASE_URL, OLLAMA_MODEL
+
+    messages = request.messages
+    context = request.context
+
+    # Build system prompt
+    system_prompt = (
+        "You are CLIF AI, a security operations assistant for the CLIF "
+        "(Cognitive Log Investigation Framework) platform. You help SOC analysts "
+        "investigate security events, understand attack patterns, interpret MITRE ATT&CK mappings, "
+        "explain SHAP-based XAI results, and provide remediation advice.\n\n"
+        "You have access to:\n"
+        "- ML classifiers (ExtraTrees / LightGBM for attack detection on NSL-KDD features)\n"
+        "- 4-agent investigation pipeline (Triage → Hunter → Verifier → Reporter)\n"
+        "- SHAP-based Explainable AI for model transparency\n"
+        "- ClickHouse log storage and LanceDB vector search\n\n"
+        "Be concise, technical, and actionable. Use proper security terminology.\n"
+        "When discussing events, reference MITRE ATT&CK framework where applicable."
+    )
+
+    if context:
+        system_prompt += f"\n\nCurrent context (security event or log):\n{json.dumps(context, indent=2, default=str)}"
+
+    if not is_llm_available():
+        # Fallback — generate a helpful response without LLM
+        user_msg = messages[-1].content if messages else ""
+        fallback = _generate_fallback_response(user_msg, context)
+        return {
+            "response": fallback,
+            "model": OLLAMA_MODEL,
+            "llm_used": False,
+            "note": "LLM unavailable — using built-in response engine",
+        }
+
+    # Call Ollama directly for chat (not via DSPy — free-form chat)
+    try:
+        import httpx
+        ollama_messages = [{"role": "system", "content": system_prompt}]
+        for msg in messages:
+            ollama_messages.append({"role": msg.role, "content": msg.content})
+
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                f"{OLLAMA_BASE_URL}/api/chat",
+                json={
+                    "model": OLLAMA_MODEL,
+                    "messages": ollama_messages,
+                    "stream": False,
+                    "options": {"temperature": 0.4, "num_predict": 1024},
+                },
+            )
+            if resp.status_code != 200:
+                raise Exception(f"Ollama returned {resp.status_code}")
+            data = resp.json()
+            answer = data.get("message", {}).get("content", "")
+            return {
+                "response": answer,
+                "model": OLLAMA_MODEL,
+                "llm_used": True,
+            }
+    except Exception as e:
+        # Fallback on error
+        user_msg = messages[-1].content if messages else ""
+        fallback = _generate_fallback_response(user_msg, context)
+        return {
+            "response": fallback,
+            "model": OLLAMA_MODEL,
+            "llm_used": False,
+            "note": f"LLM error ({str(e)[:80]}) — using built-in response engine",
+        }
+
+
+def _generate_fallback_response(user_msg: str, context: Optional[Dict] = None) -> str:
+    """Generate a helpful response without LLM access."""
+    lower = user_msg.lower()
+
+    if context:
+        cat = context.get("category", context.get("event_type", ""))
+        sev = context.get("severity", "")
+        return (
+            f"I can see you're looking at a **{cat}** event (severity: {sev}).\n\n"
+            "Here's what I recommend:\n"
+            "1. **Send to Investigation** — Run the full 4-agent pipeline for deep analysis\n"
+            "2. **Check XAI** — View SHAP feature attributions on the Explainability page\n"
+            "3. **Correlate** — Search for related events by source IP or hostname\n\n"
+            "*Note: The LLM (qwen3) is currently offline. Start Ollama for enhanced analysis.*"
+        )
+
+    if any(w in lower for w in ["mitre", "att&ck", "tactic", "technique"]):
+        return (
+            "CLIF maps detected attacks to the **MITRE ATT&CK** framework automatically.\n\n"
+            "Each investigation's Triage Agent identifies relevant tactics and techniques:\n"
+            "- **Tactics**: Initial Access, Execution, Persistence, etc.\n"
+            "- **Techniques**: E.g., T1059 (Command & Scripting), T1078 (Valid Accounts)\n\n"
+            "Check the investigation detail page for full ATT&CK mapping."
+        )
+
+    if any(w in lower for w in ["xai", "shap", "explain", "feature"]):
+        return (
+            "CLIF uses **SHAP TreeExplainer** for model transparency.\n\n"
+            "For any classified event, SHAP computes exact Shapley values showing:\n"
+            "- Which features pushed the prediction toward attack/benign\n"
+            "- Category-level attribution (traffic, connection, error rates)\n"
+            "- Decision waterfall from base prediction to final output\n\n"
+            "Visit the **Explainability** page for interactive visualization."
+        )
+
+    if any(w in lower for w in ["investigate", "pipeline", "agent"]):
+        return (
+            "CLIF's 4-agent investigation pipeline:\n\n"
+            "1. **Triage Agent** — Classifies the event (ML + rules), assigns severity/priority\n"
+            "2. **Hunter Agent** — Correlates with ClickHouse + LanceDB semantic search\n"
+            "3. **Verifier Agent** — Validates findings, checks false positive patterns\n"
+            "4. **Reporter Agent** — Generates structured investigation report\n\n"
+            "Click any log → **Send to Investigation** to run the full pipeline."
+        )
+
+    return (
+        "I'm **CLIF AI**, your security operations assistant.\n\n"
+        "I can help you with:\n"
+        "- **Investigating events** — Analyse logs through the 4-agent pipeline\n"
+        "- **Understanding attacks** — MITRE ATT&CK mapping and context\n"
+        "- **Explaining detections** — SHAP-based XAI feature attribution\n"
+        "- **Security guidance** — Remediation advice and best practices\n\n"
+        "*Start Ollama with `ollama serve` for full LLM-powered analysis.*"
+    )
 
 
 if __name__ == "__main__":

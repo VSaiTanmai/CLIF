@@ -39,6 +39,7 @@ import {
   LabelList,
 } from "recharts";
 import { useEffect, useState, useRef, useMemo } from "react";
+import { useLogContextMenu } from "@/components/log-context-menu";
 
 /* ── Constants ── */
 const SEVERITY_COLORS: Record<number, string> = {
@@ -301,6 +302,7 @@ export default function DashboardPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [investigations, setInvestigations] = useState<Investigation[]>([]);
   const [invSearch, setInvSearch] = useState("");
+  const { openMenu, ContextMenuPortal } = useLogContextMenu();
 
   /* ── Close picker on outside click ── */
   useEffect(() => {
@@ -687,7 +689,16 @@ export default function DashboardPage() {
                 alerts.slice(0, 10).map((a, i) => (
                   <div
                     key={a.event_id || i}
-                    className="rounded-lg border border-gray-100 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-3 shadow-xs"
+                    className="rounded-lg border border-gray-100 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-3 shadow-xs cursor-context-menu"
+                    onContextMenu={(e) => openMenu(e, {
+                      event_id: a.event_id,
+                      timestamp: a.timestamp,
+                      severity: a.severity,
+                      category: a.category,
+                      description: a.description,
+                      hostname: a.hostname,
+                      event_type: a.category,
+                    })}
                   >
                     <div className="mb-1 flex items-center gap-2">
                       <Badge
@@ -910,7 +921,13 @@ export default function DashboardPage() {
                     filteredInvestigations.slice(0, 5).map((inv) => (
                       <tr
                         key={inv.investigation_id}
-                        className="border-b border-gray-50 last:border-0"
+                        className="border-b border-gray-50 last:border-0 cursor-pointer hover:bg-muted/20"
+                        onContextMenu={(e) => openMenu(e, {
+                          event_id: inv.investigation_id,
+                          category: inv.category,
+                          event_type: inv.category,
+                        }, inv.investigation_id)}
+                        onClick={() => window.location.href = `/investigations/live/${inv.investigation_id}`}
                       >
                         <td className="py-3 pr-3 font-mono text-xs font-semibold text-gray-700">
                           {inv.investigation_id}
@@ -956,6 +973,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+      {ContextMenuPortal}
     </div>
   );
 }

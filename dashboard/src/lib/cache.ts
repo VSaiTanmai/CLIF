@@ -53,9 +53,19 @@ export async function cached<T>(
     }
   }
 
-  const value = await fn();
-  store.set(key, { value, expiresAt: now + ttlMs });
-  return value;
+  try {
+    const value = await fn();
+    store.set(key, { value, expiresAt: now + ttlMs });
+    return value;
+  } catch (err) {
+    // Stale-while-error: if we have ANY cached value (even expired), return it
+    // rather than propagating the error. This prevents the dashboard from
+    // flashing to zeros during transient ClickHouse/network failures.
+    if (existing) {
+      return existing.value;
+    }
+    throw err;
+  }
 }
 
 /** Invalidate a specific cache key */

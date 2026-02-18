@@ -57,6 +57,8 @@ const NAV_SECTIONS = [
     items: [
       { href: "/threat-intel", label: "Threat Intel" },
       { href: "/ai-agents", label: "AI Agents" },
+      { href: "/explainability", label: "Explainability" },
+      { href: "/chat", label: "CLIF AI Chat" },
     ],
   },
   {

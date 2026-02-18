@@ -63,6 +63,8 @@ export function usePolling<T>(
           errorCountRef.current + 1,
           MAX_BACKOFF_ERRORS,
         );
+        // IMPORTANT: Do NOT clear data on error — preserve last known good data.
+        // This prevents the dashboard from flashing to zeros during transient failures.
       }
     } finally {
       clearTimeout(timeoutId);

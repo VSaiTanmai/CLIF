@@ -35,10 +35,10 @@ const CH_MAX_RESULT_ROWS = Number(process.env.CH_MAX_RESULT_ROWS) || 100_000;
 // After a network failure, skip all queries for a cooldown period to prevent
 // log floods and wasted resources when ClickHouse is entirely unreachable.
 
-/** Cooldown period in ms after circuit opens (default 30s) */
-const CH_CIRCUIT_COOLDOWN_MS = Number(process.env.CH_CIRCUIT_COOLDOWN_MS) || 30_000;
+/** Cooldown period in ms after circuit opens (default 10s) */
+const CH_CIRCUIT_COOLDOWN_MS = Number(process.env.CH_CIRCUIT_COOLDOWN_MS) || 10_000;
 /** Number of consecutive failures to trip the circuit */
-const CH_CIRCUIT_THRESHOLD = Number(process.env.CH_CIRCUIT_THRESHOLD) || 2;
+const CH_CIRCUIT_THRESHOLD = Number(process.env.CH_CIRCUIT_THRESHOLD) || 3;
 
 let circuitFailures = 0;
 let circuitOpenUntil = 0;
