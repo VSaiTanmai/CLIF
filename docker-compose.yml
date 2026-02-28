@@ -946,13 +946,12 @@ services:
           memory: 512M
 
   # =========================================================================
-  # Triage Agent — Drain3 Template Mining + ML Scoring (LightGBM/EIF/ARF)
+  # Triage Agent — 3-Model ML Ensemble (LightGBM ONNX + EIF + River ARF)
   # =========================================================================
   # Consumes from: raw-logs, security-events, process-events, network-events
-  # Produces to:   templated-logs, triage-scores, anomaly-alerts, dead-letter
-  # ──────────────────────────────────────────────────────────────────────────
-  # NOTE: image/build context TBD — uncomment 'build' when agent code is ready.
-  #       All environment variables and topic wiring are production-final.
+  # Produces to:   triage-scores, anomaly-alerts (dead-letter on error)
+  # Writes to:     ClickHouse arf_replay_buffer (warm restart + online learning)
+  # Health:        ClickHouse + Kafka gates, startup self-test, /health on 8300
   # =========================================================================
   clif-triage-agent:
     container_name: clif-triage-agent
@@ -980,18 +979,40 @@ services:
       DRAIN3_DEPTH: 4
       DRAIN3_SIM_TH: 0.4
       DRAIN3_MAX_CHILDREN: 100
+      DRAIN3_MAX_CLUSTERS: 1024
+      DRAIN3_CONFIG_PATH: /app/drain3.ini
       # ── ML model paths ──
-      MODEL_LGBM_PATH: /models/lgbm_triage.txt
-      MODEL_EIF_PATH: /models/eif_triage.pkl
-      MODEL_ARF_CHECKPOINT: /models/arf_checkpoint.pkl
+      MODEL_DIR: /models
+      MODEL_LGBM_PATH: /models/lgbm_v1.0.0.onnx
+      MODEL_EIF_PATH: /models/eif_v1.0.0.pkl
+      MODEL_EIF_THRESHOLD_PATH: /models/eif_threshold.npy
+      MODEL_ARF_CHECKPOINT: /models/arf_v1.0.0.pkl
+      FEATURE_COLS_PATH: /models/feature_cols.pkl
+      MANIFEST_PATH: /models/manifest.json
       # ── Scoring ──
-      SCORE_WEIGHTS: "lgbm=0.45,eif=0.35,arf=0.20"
+      SCORE_WEIGHTS: "lgbm=0.50,eif=0.30,arf=0.20"
       DEFAULT_SUSPICIOUS_THRESHOLD: "0.70"
       DEFAULT_ANOMALOUS_THRESHOLD: "0.90"
+      DISAGREEMENT_THRESHOLD: "0.35"
       FEATURE_STALENESS_TIMEOUT_SEC: "300"
       # ── Performance ──
       BATCH_SIZE: "1000"
       INFERENCE_WORKERS: "4"
+      CONN_TIME_WINDOW_SEC: "2.0"
+      CONN_HOST_WINDOW_SIZE: "100"
+      # ── ARF Warm Restart ──
+      ARF_WARM_RESTART: "true"
+      ARF_REPLAY_HOURS: "24"
+      ARF_REPLAY_MAX_ROWS: "50000"
+      ARF_STREAM_CSV_PATH: "/models/features_arf_stream_features.csv"
+      ARF_N_MODELS: "10"
+      ARF_ADWIN_DELTA: "0.002"
+      ARF_ADWIN_WARNING_DELTA: "0.01"
+      ARF_SEED: "42"
+      # ── Health / Self-test ──
+      SELFTEST_ENABLED: "true"
+      STARTUP_HEALTH_RETRIES: "30"
+      STARTUP_HEALTH_DELAY_SEC: "2.0"
       LOG_LEVEL: INFO
     volumes:
       - ./agents/triage/models:/models:ro

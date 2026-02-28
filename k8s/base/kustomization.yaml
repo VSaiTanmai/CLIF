@@ -41,6 +41,9 @@ resources:
   # Network Policies
   - network-policy.yaml
 
+  # PVCs (model storage)
+  - pvcs/triage-models.yaml
+
   # Services (headless must exist before StatefulSets)
   - services/headless.yaml
   - services/application.yaml

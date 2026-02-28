@@ -75,20 +75,34 @@ spec:
               value: "0.4"
             - name: DRAIN3_MAX_CHILDREN
               value: "100"
+            - name: DRAIN3_MAX_CLUSTERS
+              value: "1024"
+            - name: DRAIN3_CONFIG_PATH
+              value: /app/drain3.ini
             # ── ML Models ──
+            - name: MODEL_DIR
+              value: /models
             - name: MODEL_LGBM_PATH
-              value: /models/lgbm_triage.txt
+              value: /models/lgbm_v1.0.0.onnx
             - name: MODEL_EIF_PATH
-              value: /models/eif_triage.pkl
+              value: /models/eif_v1.0.0.pkl
+            - name: MODEL_EIF_THRESHOLD_PATH
+              value: /models/eif_threshold.npy
             - name: MODEL_ARF_CHECKPOINT
-              value: /models/arf_checkpoint.pkl
+              value: /models/arf_v1.0.0.pkl
+            - name: FEATURE_COLS_PATH
+              value: /models/feature_cols.pkl
+            - name: MANIFEST_PATH
+              value: /models/manifest.json
             # ── Scoring ──
             - name: SCORE_WEIGHTS
-              value: "lgbm=0.45,eif=0.35,arf=0.20"
+              value: "lgbm=0.50,eif=0.30,arf=0.20"
             - name: DEFAULT_SUSPICIOUS_THRESHOLD
               value: "0.70"
             - name: DEFAULT_ANOMALOUS_THRESHOLD
               value: "0.90"
+            - name: DISAGREEMENT_THRESHOLD
+              value: "0.35"
             - name: FEATURE_STALENESS_TIMEOUT_SEC
               value: "300"
             # ── Performance ──
@@ -96,8 +110,40 @@ spec:
               value: "1000"
             - name: INFERENCE_WORKERS
               value: "4"
+            - name: CONN_TIME_WINDOW_SEC
+              value: "2.0"
+            - name: CONN_HOST_WINDOW_SIZE
+              value: "100"
+            # ── ARF Warm Restart ──
+            - name: ARF_WARM_RESTART
+              value: "true"
+            - name: ARF_REPLAY_HOURS
+              value: "24"
+            - name: ARF_REPLAY_MAX_ROWS
+              value: "50000"
+            - name: ARF_STREAM_CSV_PATH
+              value: "/models/features_arf_stream_features.csv"
+            - name: ARF_N_MODELS
+              value: "10"
+            - name: ARF_ADWIN_DELTA
+              value: "0.002"
+            - name: ARF_ADWIN_WARNING_DELTA
+              value: "0.01"
+            - name: ARF_SEED
+              value: "42"
+            # ── Health / Self-test ──
+            - name: SELFTEST_ENABLED
+              value: "true"
+            - name: STARTUP_HEALTH_RETRIES
+              value: "30"
+            - name: STARTUP_HEALTH_DELAY_SEC
+              value: "2.0"
             - name: LOG_LEVEL
               value: INFO
+          volumeMounts:
+            - name: models
+              mountPath: /models
+              readOnly: true
           resources:
             requests:
               cpu: "1"
@@ -107,7 +153,7 @@ spec:
               memory: 4Gi
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: health
             periodSeconds: 30
             timeoutSeconds: 10
@@ -117,3 +163,7 @@ spec:
               port: health
             initialDelaySeconds: 45
             periodSeconds: 30
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: triage-models-pvc
