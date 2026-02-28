@@ -79,6 +79,8 @@ spec:
               value: "1024"
             - name: DRAIN3_CONFIG_PATH
               value: /app/drain3.ini
+            - name: DRAIN3_STATE_PATH
+              value: /app/drain3_state.bin
             # ── ML Models ──
             - name: MODEL_DIR
               value: /models

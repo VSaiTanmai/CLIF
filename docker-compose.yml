@@ -981,6 +981,7 @@ services:
       DRAIN3_MAX_CHILDREN: 100
       DRAIN3_MAX_CLUSTERS: 1024
       DRAIN3_CONFIG_PATH: /app/drain3.ini
+      DRAIN3_STATE_PATH: /app/drain3_state.bin
       # ── ML model paths ──
       MODEL_DIR: /models
       MODEL_LGBM_PATH: /models/lgbm_v1.0.0.onnx

@@ -37,6 +37,13 @@ COPY score_fusion.py .
 COPY app.py .
 COPY drain3.ini .
 
+# Supplementary files (created by the training pipeline — may not exist initially)
+# drain3_state.bin    : Pre-seeded Drain3 templates (1,024 clusters) for cold-start
+# features_arf_*.csv  : ARF bootstrap data used when arf_replay_buffer is empty
+# Using shell trick: COPY with glob silently skips if no files match (BuildKit)
+COPY drain3_state.bi[n] ./
+COPY features_arf_stream_features.cs[v] ./
+
 # Models are mounted as a read-only volume at /models
 # (see docker-compose.pc2.yml: ./agents/triage/models:/models:ro)
 

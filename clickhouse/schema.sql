@@ -517,18 +517,28 @@ ORDER BY (source_type)
 SETTINGS index_granularity = 256;
 
 -- Seed default thresholds for common source types
+-- Includes BOTH Vector-native names (winlogbeat, sysmon, auditd, etc.) AND
+-- the canonical names used in training (windows_event, active_directory, etc.)
+-- so that threshold lookups succeed regardless of which naming the event uses.
 INSERT INTO clif_logs.source_thresholds (source_type, suspicious_threshold, anomalous_threshold)
 VALUES
-    ('syslog',          0.65, 0.85),
-    ('winlogbeat',      0.70, 0.90),
-    ('kubernetes',      0.75, 0.92),
-    ('nginx',           0.70, 0.88),
-    ('firewall',        0.60, 0.80),
-    ('cloudtrail',      0.68, 0.87),
-    ('sysmon',          0.65, 0.85),
-    ('auditd',          0.65, 0.85),
-    ('edr-agent',       0.70, 0.90),
-    ('ids-sensor',      0.60, 0.80);
+    -- Canonical 10 (used in training pipeline)
+    ('syslog',            0.65, 0.85),
+    ('windows_event',     0.70, 0.90),
+    ('firewall',          0.60, 0.80),
+    ('active_directory',  0.65, 0.85),
+    ('dns',               0.68, 0.87),
+    ('cloudtrail',        0.68, 0.87),
+    ('kubernetes',        0.75, 0.92),
+    ('nginx',             0.70, 0.88),
+    ('netflow',           0.65, 0.85),
+    ('ids_ips',           0.60, 0.80),
+    -- Vector-specific aliases (used when Vector is the log shipper)
+    ('winlogbeat',        0.70, 0.90),
+    ('sysmon',            0.65, 0.85),
+    ('auditd',            0.65, 0.85),
+    ('edr-agent',         0.70, 0.90),
+    ('ids-sensor',        0.60, 0.80);
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
