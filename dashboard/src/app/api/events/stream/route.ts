@@ -3,7 +3,6 @@ import { queryClickHouse } from "@/lib/clickhouse";
 import { cached } from "@/lib/cache";
 import { checkRateLimit, getClientId } from "@/lib/rate-limit";
 import { log } from "@/lib/logger";
-import { DEMO_MODE, demoEventsStream } from "@/lib/demo-data";
 
 export const dynamic = "force-dynamic";
 
@@ -40,9 +39,6 @@ const STREAM_CACHE_TTL_MS = 3_000;
 const STREAM_STALE_MS = 60_000;
 
 export async function GET(request: Request) {
-  /* ── Demo mode — instant response ── */
-  if (DEMO_MODE) return NextResponse.json(demoEventsStream());
-
   const limited = checkRateLimit(getClientId(request), RATE_LIMIT, "/api/events/stream");
   if (limited) return limited;
 

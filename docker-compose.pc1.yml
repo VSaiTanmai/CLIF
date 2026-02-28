@@ -1,0 +1,661 @@
+# =============================================================================
+# CLIF — PC1 Data Tier (Cluster Mode — Dedicated 16 GB PC)
+# =============================================================================
+# Runs: Redpanda ×3, ClickHouse ×2 + Keeper, MinIO ×3, Consumer ×3
+# Memory budget: ~5 GB actual / 16 GB available → full headroom, zero compromise
+# Usage:
+#   docker compose -f docker-compose.pc1.yml --env-file .env --env-file cluster/.env up -d
+# =============================================================================
+# IMPORTANT: Set DATA_IP in cluster/.env to this machine's LAN IP first!
+# =============================================================================
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
+networks:
+  clif-backend:
+    driver: bridge
+  clif-storage:
+    driver: bridge
+
+volumes:
+  clickhouse01_data:
+  clickhouse02_data:
+  clickhouse_keeper_data:
+  redpanda01_data:
+  redpanda02_data:
+  redpanda03_data:
+  minio1_data:
+  minio2_data:
+  minio3_data:
+
+services:
+
+  # =========================================================================
+  # ClickHouse Keeper
+  # =========================================================================
+  clickhouse-keeper:
+    image: clickhouse/clickhouse-keeper:24.8
+    container_name: clif-clickhouse-keeper
+    hostname: clickhouse-keeper
+    ports:
+      - "${ZOOKEEPER_PORT:-12181}:2181"
+    volumes:
+      - clickhouse_keeper_data:/var/lib/clickhouse-keeper
+      - ./clickhouse/keeper_config.xml:/etc/clickhouse-keeper/keeper_config.xml:ro
+    networks:
+      - clif-storage
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-keeper-client -h localhost -p 2181 -q 'ruok' | grep -q imok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # =========================================================================
+  # ClickHouse Node 1
+  # =========================================================================
+  clickhouse01:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: clif-clickhouse01
+    hostname: clickhouse01
+    ports:
+      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
+      - "${CLICKHOUSE_NATIVE_PORT:-9000}:9000"
+      - "9363:9363"          # Prometheus metrics (cluster)
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-clif_admin}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clif_secure_password_change_me}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-clif_logs}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-clif_minio_admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-clif_minio_secret_change_me}
+    volumes:
+      - clickhouse01_data:/var/lib/clickhouse
+      - ./clickhouse/node01_config.xml:/etc/clickhouse-server/config.d/clusters.xml:ro
+      - ./clickhouse/users.xml:/etc/clickhouse-server/users.d/users.xml:ro
+      - ./clickhouse/storage_policy.xml:/etc/clickhouse-server/config.d/storage_policy.xml:ro
+      - ./clickhouse/schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    depends_on:
+      clickhouse-keeper:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    networks:
+      - clif-backend
+      - clif-storage
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --user ${CLICKHOUSE_USER:-clif_admin} --password ${CLICKHOUSE_PASSWORD:-clif_secure_password_change_me} --query 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 6G
+        reservations:
+          cpus: '2'
+          memory: 3G
+
+  # =========================================================================
+  # ClickHouse Node 2
+  # =========================================================================
+  clickhouse02:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: clif-clickhouse02
+    hostname: clickhouse02
+    ports:
+      - "8124:8123"
+      - "9001:9000"
+      - "9364:9363"          # Prometheus metrics (cluster)
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-clif_admin}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clif_secure_password_change_me}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-clif_logs}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-clif_minio_admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-clif_minio_secret_change_me}
+    volumes:
+      - clickhouse02_data:/var/lib/clickhouse
+      - ./clickhouse/node02_config.xml:/etc/clickhouse-server/config.d/clusters.xml:ro
+      - ./clickhouse/users.xml:/etc/clickhouse-server/users.d/users.xml:ro
+      - ./clickhouse/storage_policy.xml:/etc/clickhouse-server/config.d/storage_policy.xml:ro
+      - ./clickhouse/schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    depends_on:
+      clickhouse-keeper:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    networks:
+      - clif-backend
+      - clif-storage
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --user ${CLICKHOUSE_USER:-clif_admin} --password ${CLICKHOUSE_PASSWORD:-clif_secure_password_change_me} --query 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 6G
+        reservations:
+          cpus: '2'
+          memory: 3G
+
+  # =========================================================================
+  # Redpanda Broker 1
+  # =========================================================================
+  redpanda01:
+    image: redpandadata/redpanda:v24.2.8
+    container_name: clif-redpanda01
+    hostname: redpanda01
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda01:9092,external://${DATA_IP:-localhost}:19092
+      - --rpc-addr 0.0.0.0:33145
+      - --advertise-rpc-addr redpanda01:33145
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://redpanda01:8082,external://${DATA_IP:-localhost}:18082
+      - --smp ${REDPANDA_SMP:-1}
+      - --memory ${REDPANDA_MEMORY:-2G}
+      - --reserve-memory 200M
+      - --default-log-level=warn
+      - --seeds redpanda01:33145
+    ports:
+      - "19092:19092"
+      - "18082:18082"
+      - "${REDPANDA_ADMIN_PORT:-9644}:9644"
+    volumes:
+      - redpanda01_data:/var/lib/redpanda/data
+    networks:
+      - clif-backend
+      - clif-storage
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9644/v1/status/ready || rpk brokers list | grep -q '9092'"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: ${REDPANDA_MEM_LIMIT:-3G}
+        reservations:
+          cpus: '1'
+          memory: ${REDPANDA_MEMORY:-2G}
+
+  # =========================================================================
+  # Redpanda Broker 2
+  # =========================================================================
+  redpanda02:
+    image: redpandadata/redpanda:v24.2.8
+    container_name: clif-redpanda02
+    hostname: redpanda02
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:29092
+      - --advertise-kafka-addr internal://redpanda02:9092,external://${DATA_IP:-localhost}:29092
+      - --rpc-addr 0.0.0.0:33145
+      - --advertise-rpc-addr redpanda02:33145
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:28082
+      - --advertise-pandaproxy-addr internal://redpanda02:8082,external://${DATA_IP:-localhost}:28082
+      - --smp ${REDPANDA_SMP:-1}
+      - --memory ${REDPANDA_MEMORY:-2G}
+      - --reserve-memory 200M
+      - --default-log-level=warn
+      - --seeds redpanda01:33145
+    ports:
+      - "29092:29092"
+      - "28082:28082"
+      - "9645:9644"           # Admin API (cluster — unique port)
+    volumes:
+      - redpanda02_data:/var/lib/redpanda/data
+    networks:
+      - clif-backend
+      - clif-storage
+    depends_on:
+      redpanda01:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9644/v1/status/ready || rpk brokers list | grep -q '9092'"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: ${REDPANDA_MEM_LIMIT:-3G}
+        reservations:
+          cpus: '1'
+          memory: ${REDPANDA_MEMORY:-2G}
+
+  # =========================================================================
+  # Redpanda Broker 3
+  # =========================================================================
+  redpanda03:
+    image: redpandadata/redpanda:v24.2.8
+    container_name: clif-redpanda03
+    hostname: redpanda03
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:39092
+      - --advertise-kafka-addr internal://redpanda03:9092,external://${DATA_IP:-localhost}:39092
+      - --rpc-addr 0.0.0.0:33145
+      - --advertise-rpc-addr redpanda03:33145
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:38082
+      - --advertise-pandaproxy-addr internal://redpanda03:8082,external://${DATA_IP:-localhost}:38082
+      - --smp ${REDPANDA_SMP:-1}
+      - --memory ${REDPANDA_MEMORY:-2G}
+      - --reserve-memory 200M
+      - --default-log-level=warn
+      - --seeds redpanda01:33145
+    ports:
+      - "39092:39092"
+      - "38082:38082"
+      - "9646:9644"           # Admin API (cluster — unique port)
+    volumes:
+      - redpanda03_data:/var/lib/redpanda/data
+    networks:
+      - clif-backend
+      - clif-storage
+    depends_on:
+      redpanda01:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9644/v1/status/ready || rpk brokers list | grep -q '9092'"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: ${REDPANDA_MEM_LIMIT:-3G}
+        reservations:
+          cpus: '1'
+          memory: ${REDPANDA_MEMORY:-2G}
+
+  # =========================================================================
+  # MinIO Node 1
+  # =========================================================================
+  minio1:
+    image: minio/minio:RELEASE.2024-08-29T01-40-52Z
+    container_name: clif-minio1
+    hostname: minio1
+    command: server http://minio{1...3}/data --console-address ":9001"
+    ports:
+      - "${MINIO_DATA_PORT:-9002}:9000"
+      - "${MINIO_CONSOLE_PORT:-9003}:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-clif_minio_admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-clif_minio_secret_change_me}
+      MINIO_PROMETHEUS_AUTH_TYPE: public
+    volumes:
+      - minio1_data:/data
+    networks:
+      - clif-storage
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # =========================================================================
+  # MinIO Node 2
+  # =========================================================================
+  minio2:
+    image: minio/minio:RELEASE.2024-08-29T01-40-52Z
+    container_name: clif-minio2
+    hostname: minio2
+    command: server http://minio{1...3}/data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-clif_minio_admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-clif_minio_secret_change_me}
+      MINIO_PROMETHEUS_AUTH_TYPE: public
+    volumes:
+      - minio2_data:/data
+    networks:
+      - clif-storage
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # =========================================================================
+  # MinIO Node 3
+  # =========================================================================
+  minio3:
+    image: minio/minio:RELEASE.2024-08-29T01-40-52Z
+    container_name: clif-minio3
+    hostname: minio3
+    command: server http://minio{1...3}/data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-clif_minio_admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-clif_minio_secret_change_me}
+      MINIO_PROMETHEUS_AUTH_TYPE: public
+    volumes:
+      - minio3_data:/data
+    networks:
+      - clif-storage
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # =========================================================================
+  # MinIO bucket initialiser
+  # =========================================================================
+  minio-init:
+    image: minio/mc:RELEASE.2024-08-26T10-49-58Z
+    container_name: clif-minio-init
+    depends_on:
+      minio1:
+        condition: service_healthy
+    entrypoint: |
+      /bin/sh -c "
+        mc alias set clif http://minio1:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD};
+        mc mb --ignore-existing clif/${MINIO_BUCKET_COLD:-clif-cold-logs};
+        mc mb --ignore-existing clif/${MINIO_BUCKET_BACKUPS:-clif-backups};
+        mc mb --ignore-existing clif/${MINIO_BUCKET_EVIDENCE:-clif-evidence-archive};
+        echo 'MinIO buckets initialised.';
+      "
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-clif_minio_admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-clif_minio_secret_change_me}
+    networks:
+      - clif-storage
+
+  # =========================================================================
+  # Redpanda topic initialiser
+  # =========================================================================
+  redpanda-init:
+    image: redpandadata/redpanda:v24.2.8
+    container_name: clif-redpanda-init
+    depends_on:
+      redpanda01:
+        condition: service_healthy
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        set -e
+        BROKER="redpanda01:9092"
+        PARTITIONS=$${REDPANDA_PARTITIONS:-12}
+        RF=$${REDPANDA_REPLICATION_FACTOR:-3}
+        RETENTION=$${REDPANDA_LOG_RETENTION_MS:-604800000}
+        AGENT_P=$$(( PARTITIONS / 2 ))
+        [ "$$AGENT_P" -lt 3 ] && AGENT_P=3
+
+        echo "── Creating ingestion topics ($$PARTITIONS partitions) ──"
+        for TOPIC in raw-logs security-events process-events network-events; do
+          rpk topic create "$$TOPIC" \
+            --brokers "$$BROKER" \
+            --partitions "$$PARTITIONS" \
+            --replicas "$$RF" \
+            --topic-config retention.ms="$$RETENTION" \
+            --topic-config cleanup.policy=delete \
+            --topic-config compression.type=producer \
+            --topic-config max.message.bytes=10485760 || true
+          echo "  ✔ topic $$TOPIC ready"
+        done
+
+        echo "── Creating triage pipeline topics ($$PARTITIONS partitions) ──"
+        for TOPIC in templated-logs triage-scores anomaly-alerts; do
+          rpk topic create "$$TOPIC" \
+            --brokers "$$BROKER" \
+            --partitions "$$PARTITIONS" \
+            --replicas "$$RF" \
+            --topic-config retention.ms="$$RETENTION" \
+            --topic-config cleanup.policy=delete \
+            --topic-config compression.type=producer \
+            --topic-config max.message.bytes=10485760 || true
+          echo "  ✔ topic $$TOPIC ready"
+        done
+
+        echo "── Creating agent pipeline topics ($$AGENT_P partitions) ──"
+        for TOPIC in hunter-tasks hunter-results verifier-tasks verifier-results; do
+          rpk topic create "$$TOPIC" \
+            --brokers "$$BROKER" \
+            --partitions "$$AGENT_P" \
+            --replicas "$$RF" \
+            --topic-config retention.ms="$$RETENTION" \
+            --topic-config cleanup.policy=delete \
+            --topic-config compression.type=producer \
+            --topic-config max.message.bytes=10485760 || true
+          echo "  ✔ topic $$TOPIC ready"
+        done
+
+        echo "── Creating operational topics (3 partitions) ──"
+        for TOPIC in feedback-labels dead-letter pipeline-commands; do
+          rpk topic create "$$TOPIC" \
+            --brokers "$$BROKER" \
+            --partitions 3 \
+            --replicas "$$RF" \
+            --topic-config retention.ms="$$((RETENTION * 4))" \
+            --topic-config cleanup.policy=delete \
+            --topic-config compression.type=producer \
+            --topic-config max.message.bytes=10485760 || true
+          echo "  ✔ topic $$TOPIC ready"
+        done
+
+        rpk topic list --brokers "$$BROKER"
+        echo "All CLIF topics initialised (14 topics)."
+    environment:
+      REDPANDA_PARTITIONS: ${REDPANDA_PARTITIONS:-12}
+      REDPANDA_REPLICATION_FACTOR: ${REDPANDA_REPLICATION_FACTOR:-3}
+      REDPANDA_LOG_RETENTION_MS: ${REDPANDA_LOG_RETENTION_MS:-604800000}
+    networks:
+      - clif-backend
+
+  # =========================================================================
+  # Consumer 1
+  # =========================================================================
+  clif-consumer:
+    build:
+      context: ./consumer
+      dockerfile: Dockerfile
+    container_name: clif-consumer
+    hostname: clif-consumer
+    environment:
+      KAFKA_BROKERS: redpanda01:9092,redpanda02:9092,redpanda03:9092
+      CLICKHOUSE_HOST: clickhouse01
+      CLICKHOUSE_ALT_HOSTS: clickhouse02:9000
+      CLICKHOUSE_PORT: 9000
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-clif_admin}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clif_secure_password_change_me}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-clif_logs}
+      CONSUMER_GROUP_ID: ${CONSUMER_GROUP_ID:-clif-clickhouse-consumer}
+      CONSUMER_BATCH_SIZE: ${CONSUMER_BATCH_SIZE:-500000}
+      CONSUMER_FLUSH_INTERVAL_SEC: ${CONSUMER_FLUSH_INTERVAL_SEC:-0.3}
+      CONSUMER_MAX_RETRIES: ${CONSUMER_MAX_RETRIES:-5}
+      CONSUMER_POLL_BATCH: ${CONSUMER_POLL_BATCH:-50000}
+      CONSUMER_FLUSH_WORKERS: ${CONSUMER_FLUSH_WORKERS:-6}
+      LOG_LEVEL: INFO
+    depends_on:
+      clickhouse01:
+        condition: service_healthy
+      redpanda01:
+        condition: service_healthy
+    networks:
+      - clif-backend
+      - clif-storage
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import socket; s=socket.socket(); s.settimeout(2); s.connect((\"clickhouse01\",9000)); s.close()' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging: *default-logging
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1.5G
+        reservations:
+          cpus: '1'
+          memory: 512M
+
+  # =========================================================================
+  # Consumer 2
+  # =========================================================================
+  clif-consumer-2:
+    build:
+      context: ./consumer
+      dockerfile: Dockerfile
+    container_name: clif-consumer-2
+    hostname: clif-consumer-2
+    environment:
+      KAFKA_BROKERS: redpanda01:9092,redpanda02:9092,redpanda03:9092
+      CLICKHOUSE_HOST: clickhouse01
+      CLICKHOUSE_ALT_HOSTS: clickhouse02:9000
+      CLICKHOUSE_PORT: 9000
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-clif_admin}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clif_secure_password_change_me}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-clif_logs}
+      CONSUMER_GROUP_ID: ${CONSUMER_GROUP_ID:-clif-clickhouse-consumer}
+      CONSUMER_BATCH_SIZE: ${CONSUMER_BATCH_SIZE:-500000}
+      CONSUMER_FLUSH_INTERVAL_SEC: ${CONSUMER_FLUSH_INTERVAL_SEC:-0.3}
+      CONSUMER_MAX_RETRIES: ${CONSUMER_MAX_RETRIES:-5}
+      CONSUMER_POLL_BATCH: ${CONSUMER_POLL_BATCH:-50000}
+      CONSUMER_FLUSH_WORKERS: ${CONSUMER_FLUSH_WORKERS:-6}
+      LOG_LEVEL: INFO
+    depends_on:
+      clickhouse01:
+        condition: service_healthy
+      redpanda01:
+        condition: service_healthy
+    networks:
+      - clif-backend
+      - clif-storage
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import socket; s=socket.socket(); s.settimeout(2); s.connect((\"clickhouse01\",9000)); s.close()' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging: *default-logging
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1.5G
+        reservations:
+          cpus: '1'
+          memory: 512M
+
+  # =========================================================================
+  # Consumer 3
+  # =========================================================================
+  clif-consumer-3:
+    build:
+      context: ./consumer
+      dockerfile: Dockerfile
+    container_name: clif-consumer-3
+    hostname: clif-consumer-3
+    environment:
+      KAFKA_BROKERS: redpanda01:9092,redpanda02:9092,redpanda03:9092
+      CLICKHOUSE_HOST: clickhouse01
+      CLICKHOUSE_ALT_HOSTS: clickhouse02:9000
+      CLICKHOUSE_PORT: 9000
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-clif_admin}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clif_secure_password_change_me}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-clif_logs}
+      CONSUMER_GROUP_ID: ${CONSUMER_GROUP_ID:-clif-clickhouse-consumer}
+      CONSUMER_BATCH_SIZE: ${CONSUMER_BATCH_SIZE:-500000}
+      CONSUMER_FLUSH_INTERVAL_SEC: ${CONSUMER_FLUSH_INTERVAL_SEC:-0.3}
+      CONSUMER_MAX_RETRIES: ${CONSUMER_MAX_RETRIES:-5}
+      CONSUMER_POLL_BATCH: ${CONSUMER_POLL_BATCH:-50000}
+      CONSUMER_FLUSH_WORKERS: ${CONSUMER_FLUSH_WORKERS:-6}
+      LOG_LEVEL: INFO
+    depends_on:
+      clickhouse01:
+        condition: service_healthy
+      redpanda01:
+        condition: service_healthy
+    networks:
+      - clif-backend
+      - clif-storage
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import socket; s=socket.socket(); s.settimeout(2); s.connect((\"clickhouse01\",9000)); s.close()' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging: *default-logging
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1.5G
+        reservations:
+          cpus: '1'
+          memory: 512M

@@ -3,14 +3,10 @@ import { queryClickHouse } from "@/lib/clickhouse";
 import { cached } from "@/lib/cache";
 import { checkRateLimit, getClientId } from "@/lib/rate-limit";
 import { log } from "@/lib/logger";
-import { DEMO_MODE, demoReports } from "@/lib/demo-data";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  /* ── Demo mode — instant response ── */
-  if (DEMO_MODE) return NextResponse.json(demoReports());
-
   const limited = checkRateLimit(getClientId(request), { maxTokens: 20, refillRate: 1 });
   if (limited) return limited;
 

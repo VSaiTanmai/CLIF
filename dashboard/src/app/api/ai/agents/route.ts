@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { DEMO_MODE, demoAiAgents } from "@/lib/demo-data";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://localhost:8200";
 
@@ -7,9 +6,6 @@ const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://localhost:8200";
  * GET /api/ai/agents — Get status of all AI agents + recent investigations
  */
 export async function GET() {
-  /* ── Demo mode — instant response ── */
-  if (DEMO_MODE) return NextResponse.json(demoAiAgents());
-
   try {
     const [statusRes, invRes] = await Promise.all([
       fetch(`${AI_SERVICE_URL}/agents/status`, {

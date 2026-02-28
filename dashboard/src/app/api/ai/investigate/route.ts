@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { DEMO_MODE, demoAiInvestigate } from "@/lib/demo-data";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://localhost:8200";
 
@@ -12,9 +11,6 @@ const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://localhost:8200";
  *  - "generic"   → /investigate/generic (any log type: Sysmon, auth, firewall…)
  */
 export async function POST(req: NextRequest) {
-  /* ── Demo mode — instant response ── */
-  if (DEMO_MODE) return NextResponse.json(demoAiInvestigate());
-
   try {
     const body = await req.json();
     const { event, mode = "features" } = body;

@@ -46,7 +46,7 @@ from datetime import datetime, timezone
 from threading import Event, Lock, Semaphore, Thread
 from typing import Any
 
-from confluent_kafka import Consumer, KafkaError, KafkaException
+from confluent_kafka import Consumer, Producer, KafkaError, KafkaException
 from clickhouse_driver import Client as CHClient
 
 try:
@@ -54,11 +54,17 @@ try:
 
     def _json_loads(data: bytes | str) -> Any:
         return _json.loads(data)
+
+    def _json_dumps(data: Any) -> bytes:
+        return _json.dumps(data)
 except ImportError:
     import json as _json  # type: ignore[no-redef]
 
     def _json_loads(data: bytes | str) -> Any:  # type: ignore[misc]
         return _json.loads(data)
+
+    def _json_dumps(data: Any) -> bytes:  # type: ignore[misc]
+        return _json.dumps(data).encode("utf-8")
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
@@ -70,24 +76,37 @@ CLICKHOUSE_USER = os.getenv("CLICKHOUSE_USER", "clif_admin")
 CLICKHOUSE_PASSWORD = os.getenv("CLICKHOUSE_PASSWORD", "clif_secure_password_change_me")
 CLICKHOUSE_DB = os.getenv("CLICKHOUSE_DB", "clif_logs")
 CONSUMER_GROUP = os.getenv("CONSUMER_GROUP_ID", "clif-clickhouse-consumer")
-BATCH_SIZE = int(os.getenv("CONSUMER_BATCH_SIZE", "200000"))
+BATCH_SIZE = int(os.getenv("CONSUMER_BATCH_SIZE", "500000"))
 FLUSH_INTERVAL = float(os.getenv("CONSUMER_FLUSH_INTERVAL_SEC", "0.5"))
 MAX_RETRIES = int(os.getenv("CONSUMER_MAX_RETRIES", "5"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 
 # Performance tuning knobs
-POLL_BATCH = int(os.getenv("CONSUMER_POLL_BATCH", "10000"))
+POLL_BATCH = int(os.getenv("CONSUMER_POLL_BATCH", "50000"))
 FLUSH_WORKERS = int(os.getenv("CONSUMER_FLUSH_WORKERS", "4"))
 
 # Dead-letter logging: count dropped messages per interval for observability
 DLQ_LOG_INTERVAL = int(os.getenv("DLQ_LOG_INTERVAL_SEC", "60"))
+DLQ_TOPIC = os.getenv("DLQ_TOPIC", "dead-letter")
 
 # Topic → ClickHouse table mapping
+# ┌─ Ingestion tier   : raw logs + classified events from Vector
+# ├─ Triage tier      : ML-scored events from Triage Agent
+# ├─ Agent tier       : investigation & verification results
+# └─ Operational tier : analyst feedback for model retraining
 TOPIC_TABLE_MAP: dict[str, str] = {
+    # Ingestion tier
     "raw-logs": "raw_logs",
     "security-events": "security_events",
     "process-events": "process_events",
     "network-events": "network_events",
+    # Triage tier (consumed from Triage Agent output)
+    "triage-scores": "triage_scores",
+    # Agent tier (consumed from Hunter / Verifier output)
+    "hunter-results": "hunter_investigations",
+    "verifier-results": "verifier_results",
+    # Operational tier
+    "feedback-labels": "feedback_labels",
 }
 
 # Reverse map for fast stats lookups (table → topic)
@@ -274,6 +293,167 @@ def _build_network_event_row(msg: dict) -> list:
     ]
 
 
+# ── Additional helpers for AI pipeline tables ────────────────────────────────
+
+_NIL_UUID = "00000000-0000-0000-0000-000000000000"
+
+
+def _safe_uuid_str(val: Any, default: str = _NIL_UUID) -> str:
+    """Return a valid UUID string for ClickHouse UUID columns."""
+    if val is None:
+        return default
+    s = str(val).strip()
+    # Quick format check: 8-4-4-4-12 = 36 chars with hyphens
+    if len(s) == 36 and s[8] == "-":
+        return s
+    return default
+
+
+def _safe_nullable_uuid_str(val: Any) -> str | None:
+    """Return UUID string or None for Nullable(UUID) columns."""
+    if val is None:
+        return None
+    s = str(val).strip()
+    if len(s) == 36 and s[8] == "-":
+        return s
+    return None
+
+
+def _safe_nullable_dt(val: Any) -> datetime | None:
+    """Parse a timestamp or return None for Nullable(DateTime64) columns."""
+    if val is None:
+        return None
+    return _parse_timestamp(str(val))
+
+
+def _safe_str_array(val: Any) -> list[str]:
+    """Normalize to a list of strings for Array(String) columns."""
+    if val is None:
+        return []
+    if isinstance(val, list):
+        return [str(v) for v in val]
+    return []
+
+
+def _safe_uuid_array(val: Any) -> list[str]:
+    """Normalize to a list of UUID strings for Array(UUID) columns."""
+    if val is None:
+        return []
+    if isinstance(val, list):
+        return [_safe_uuid_str(v) for v in val]
+    return []
+
+
+# ── Row builders for AI pipeline tables ──────────────────────────────────────
+
+
+def _build_triage_score_row(msg: dict) -> list:
+    """Build a row for the triage_scores table (Triage Agent output)."""
+    return [
+        # score_id: server-generated UUID (OMITTED)
+        _safe_uuid_str(msg.get("event_id")),         # event_id
+        _parse_timestamp(msg.get("timestamp")),       # timestamp
+        _safe_str(msg.get("source_type")),            # source_type
+        _safe_str(msg.get("hostname")),               # hostname
+        _safe_str(msg.get("source_ip")),              # source_ip
+        _safe_str(msg.get("user_id")),                # user_id
+        # Template mining
+        _safe_str(msg.get("template_id")),            # template_id
+        _safe_float(msg.get("template_rarity")),      # template_rarity
+        # ML scores
+        _safe_float(msg.get("combined_score")),       # combined_score
+        _safe_float(msg.get("lgbm_score")),           # lgbm_score
+        _safe_float(msg.get("eif_score")),            # eif_score
+        _safe_float(msg.get("arf_score")),            # arf_score
+        # Confidence interval
+        _safe_float(msg.get("score_std_dev")),        # score_std_dev
+        _safe_float(msg.get("agreement")),            # agreement
+        _safe_float(msg.get("ci_lower")),             # ci_lower
+        _safe_float(msg.get("ci_upper")),             # ci_upper
+        # Asset adjustment
+        _safe_float(msg.get("asset_multiplier"), 1.0),# asset_multiplier
+        _safe_float(msg.get("adjusted_score")),       # adjusted_score
+        # Routing decision
+        _safe_str(msg.get("action"), "discard"),       # action (Enum8)
+        # Threat intel
+        _safe_int(msg.get("ioc_match")),              # ioc_match
+        _safe_int(msg.get("ioc_confidence")),         # ioc_confidence
+        # MITRE
+        _safe_str(msg.get("mitre_tactic")),           # mitre_tactic
+        _safe_str(msg.get("mitre_technique")),        # mitre_technique
+        # SHAP explainability
+        _safe_str(msg.get("shap_top_features")),      # shap_top_features
+        _safe_str(msg.get("shap_summary")),           # shap_summary
+        # Flags
+        _safe_int(msg.get("features_stale")),         # features_stale
+        _safe_str(msg.get("model_version")),          # model_version
+        _safe_int(msg.get("disagreement_flag")),      # disagreement_flag
+    ]
+
+
+def _build_hunter_investigation_row(msg: dict) -> list:
+    """Build a row for the hunter_investigations table (Hunter Agent output)."""
+    return [
+        # investigation_id: server-generated UUID (OMITTED)
+        _safe_uuid_str(msg.get("alert_id")),           # alert_id
+        _parse_timestamp(msg.get("started_at")),       # started_at
+        _safe_nullable_dt(msg.get("completed_at")),    # completed_at (Nullable)
+        _safe_str(msg.get("status"), "pending"),       # status (Enum8)
+        _safe_str(msg.get("hostname")),                # hostname
+        _safe_str(msg.get("source_ip")),               # source_ip
+        _safe_str(msg.get("user_id")),                 # user_id
+        _safe_float(msg.get("trigger_score")),         # trigger_score
+        _safe_str(msg.get("severity"), "info"),        # severity (Enum8)
+        _safe_str(msg.get("finding_type")),            # finding_type
+        _safe_str(msg.get("summary")),                 # summary
+        _safe_str(msg.get("evidence_json")),           # evidence_json
+        _safe_uuid_array(msg.get("correlated_events")),# correlated_events Array(UUID)
+        _safe_str_array(msg.get("mitre_tactics")),     # mitre_tactics Array(String)
+        _safe_str_array(msg.get("mitre_techniques")),  # mitre_techniques Array(String)
+        _safe_str(msg.get("recommended_action")),      # recommended_action
+        _safe_float(msg.get("confidence")),            # confidence
+    ]
+
+
+def _build_verifier_result_row(msg: dict) -> list:
+    """Build a row for the verifier_results table (Verifier Agent output)."""
+    return [
+        # verification_id: server-generated UUID (OMITTED)
+        _safe_uuid_str(msg.get("investigation_id")),   # investigation_id
+        _safe_uuid_str(msg.get("alert_id")),           # alert_id
+        _parse_timestamp(msg.get("started_at")),       # started_at
+        _safe_nullable_dt(msg.get("completed_at")),    # completed_at (Nullable)
+        _safe_str(msg.get("status"), "pending"),       # status (Enum8)
+        _safe_str(msg.get("verdict"), "inconclusive"), # verdict (Enum8)
+        _safe_float(msg.get("confidence")),            # confidence
+        _safe_int(msg.get("evidence_verified")),       # evidence_verified
+        _safe_str_array(msg.get("merkle_batch_ids")),  # merkle_batch_ids Array(String)
+        _safe_str(msg.get("timeline_json")),           # timeline_json
+        _safe_str(msg.get("ioc_correlations")),        # ioc_correlations
+        _safe_str(msg.get("priority"), "P4"),          # priority (Enum8)
+        _safe_str(msg.get("recommended_action")),      # recommended_action
+        _safe_str(msg.get("analyst_summary")),         # analyst_summary
+    ]
+
+
+def _build_feedback_label_row(msg: dict) -> list:
+    """Build a row for the feedback_labels table (analyst feedback)."""
+    return [
+        # feedback_id: server-generated UUID (OMITTED)
+        _safe_uuid_str(msg.get("event_id")),           # event_id
+        _safe_nullable_uuid_str(msg.get("score_id")),  # score_id (Nullable UUID)
+        _parse_timestamp(msg.get("timestamp")),        # timestamp
+        _safe_str(msg.get("label"), "unknown"),         # label (Enum8)
+        _safe_str(msg.get("confidence"), "medium"),     # confidence (Enum8)
+        _safe_str(msg.get("analyst_id")),              # analyst_id
+        _safe_str(msg.get("notes")),                   # notes
+        _safe_float(msg.get("original_combined")),     # original_combined
+        _safe_float(msg.get("original_lgbm")),         # original_lgbm
+        _safe_float(msg.get("original_eif")),          # original_eif
+        _safe_float(msg.get("original_arf")),          # original_arf
+    ]
+
+
 # Column lists — event_id and raw_log_event_id OMITTED (server-generated UUIDs)
 RAW_LOGS_COLUMNS = [
     "timestamp", "received_at", "level", "source", "message",
@@ -301,11 +481,54 @@ NETWORK_EVENTS_COLUMNS = [
     "anchor_tx_id", "metadata",
 ]
 
+# ── AI pipeline column lists (auto-generated IDs omitted — server-side UUIDs) ──
+
+TRIAGE_SCORES_COLUMNS = [
+    "event_id", "timestamp", "source_type", "hostname", "source_ip", "user_id",
+    "template_id", "template_rarity",
+    "combined_score", "lgbm_score", "eif_score", "arf_score",
+    "score_std_dev", "agreement", "ci_lower", "ci_upper",
+    "asset_multiplier", "adjusted_score",
+    "action", "ioc_match", "ioc_confidence",
+    "mitre_tactic", "mitre_technique",
+    "shap_top_features", "shap_summary",
+    "features_stale", "model_version", "disagreement_flag",
+]
+HUNTER_INVESTIGATIONS_COLUMNS = [
+    "alert_id", "started_at", "completed_at", "status",
+    "hostname", "source_ip", "user_id", "trigger_score",
+    "severity", "finding_type", "summary", "evidence_json",
+    "correlated_events", "mitre_tactics", "mitre_techniques",
+    "recommended_action", "confidence",
+]
+VERIFIER_RESULTS_COLUMNS = [
+    "investigation_id", "alert_id", "started_at", "completed_at", "status",
+    "verdict", "confidence", "evidence_verified", "merkle_batch_ids",
+    "timeline_json", "ioc_correlations",
+    "priority", "recommended_action", "analyst_summary",
+]
+FEEDBACK_LABELS_COLUMNS = [
+    "event_id", "score_id", "timestamp",
+    "label", "confidence", "analyst_id", "notes",
+    "original_combined", "original_lgbm", "original_eif", "original_arf",
+]
+DEAD_LETTER_EVENTS_COLUMNS = [
+    "timestamp", "failed_stage", "source_topic",
+    "error_message", "raw_payload", "retry_count",
+]
+
 TABLE_META: dict[str, dict] = {
     "raw_logs":        {"columns": RAW_LOGS_COLUMNS,        "builder": _build_raw_log_row},
     "security_events": {"columns": SECURITY_EVENTS_COLUMNS, "builder": _build_security_event_row},
     "process_events":  {"columns": PROCESS_EVENTS_COLUMNS,  "builder": _build_process_event_row},
     "network_events":  {"columns": NETWORK_EVENTS_COLUMNS,  "builder": _build_network_event_row},
+    # AI pipeline tables
+    "triage_scores":         {"columns": TRIAGE_SCORES_COLUMNS,        "builder": _build_triage_score_row},
+    "hunter_investigations": {"columns": HUNTER_INVESTIGATIONS_COLUMNS,"builder": _build_hunter_investigation_row},
+    "verifier_results":      {"columns": VERIFIER_RESULTS_COLUMNS,     "builder": _build_verifier_result_row},
+    "feedback_labels":       {"columns": FEEDBACK_LABELS_COLUMNS,      "builder": _build_feedback_label_row},
+    # Operational (DLQ events written directly by _buffer_dlq_event, builder=None)
+    "dead_letter_events":    {"columns": DEAD_LETTER_EVENTS_COLUMNS,   "builder": None},
 }
 
 # ── ClickHouse Writer Pool ──────────────────────────────────────────────────
@@ -478,6 +701,60 @@ class StatsReporter(Thread):
                 )
 
 
+# ── Dead-Letter Queue (DLQ) ──────────────────────────────────────────────────
+# Failed events are (1) buffered for the dead_letter_events ClickHouse table
+# (for dashboard visibility) and (2) published to the dead-letter Redpanda topic
+# (for external replay / alerting).
+
+_dlq_producer: Producer | None = None
+
+
+def _publish_to_dlq(raw_msg: Any, error_msg: str, stage: str) -> None:
+    """Non-blocking publish of a failed event to the dead-letter Redpanda topic."""
+    if _dlq_producer is None:
+        return
+    try:
+        dlq_event = _json_dumps({
+            "timestamp": _now_dt().isoformat(),
+            "failed_stage": stage,
+            "source_topic": raw_msg.topic() if raw_msg else "",
+            "error_message": error_msg[:500],
+            "raw_payload": (
+                raw_msg.value().decode("utf-8", errors="replace")[:10000]
+                if raw_msg and raw_msg.value() else ""
+            ),
+            "retry_count": 0,
+        })
+        _dlq_producer.produce(DLQ_TOPIC, value=dlq_event)
+    except Exception:
+        pass  # never let DLQ publishing crash the main pipeline
+
+
+def _buffer_dlq_event(
+    buffers: dict[str, list[list]],
+    source_topic: str,
+    raw_payload: bytes | None,
+    error_msg: str,
+    stage: str,
+) -> None:
+    """Buffer a dead-letter event for the next ClickHouse flush cycle."""
+    col_bufs = buffers.get("dead_letter_events")
+    if col_bufs is None:
+        return
+    try:
+        col_bufs[0].append(_now_dt())                     # timestamp
+        col_bufs[1].append(stage)                          # failed_stage
+        col_bufs[2].append(source_topic)                   # source_topic
+        col_bufs[3].append(error_msg[:500])                # error_message
+        col_bufs[4].append(                                # raw_payload
+            raw_payload.decode("utf-8", errors="replace")[:10000]
+            if isinstance(raw_payload, bytes) else str(raw_payload or "")[:10000]
+        )
+        col_bufs[5].append(0)                              # retry_count
+    except Exception:
+        pass
+
+
 # ── Batch deserializer ───────────────────────────────────────────────────────
 
 
@@ -610,6 +887,15 @@ def main() -> None:
     stats = StatsReporter()
     stats.start()
 
+    # ── DLQ producer for publishing failed events to dead-letter topic ──
+    global _dlq_producer
+    _dlq_producer = Producer({
+        "bootstrap.servers": KAFKA_BROKERS,
+        "linger.ms": 50,              # batch DLQ messages for 50ms before send
+        "compression.type": "lz4",
+        "queue.buffering.max.messages": 100000,
+    })
+
     # ── Kafka consumer with optimized fetch settings ──
     consumer = Consumer({
         "bootstrap.servers": KAFKA_BROKERS,
@@ -651,6 +937,10 @@ def main() -> None:
 
     try:
         while not _shutdown.is_set():
+            # Trigger DLQ producer delivery callbacks (non-blocking)
+            if _dlq_producer:
+                _dlq_producer.poll(0)
+
             # ── Batch poll: up to POLL_BATCH messages in one syscall ──
             messages = consumer.consume(num_messages=POLL_BATCH, timeout=0.5)
 
@@ -687,16 +977,20 @@ def main() -> None:
 
                 try:
                     payload = _json_loads(raw_msg.value())
-                except (ValueError, UnicodeDecodeError, TypeError):
+                except (ValueError, UnicodeDecodeError, TypeError) as exc:
                     error_count += 1
                     stats.record_parse_error()
+                    _buffer_dlq_event(buffers, topic, raw_msg.value(), str(exc), "json_parse")
+                    _publish_to_dlq(raw_msg, str(exc), "json_parse")
                     continue
 
                 try:
                     row = TABLE_META[table]["builder"](payload)
-                except Exception:
+                except Exception as exc:
                     error_count += 1
                     stats.record_parse_error()
+                    _buffer_dlq_event(buffers, topic, raw_msg.value(), str(exc), "row_build")
+                    _publish_to_dlq(raw_msg, str(exc), "row_build")
                     continue
 
                 # Distribute row values into columnar buffers
@@ -760,6 +1054,11 @@ def main() -> None:
             log.error("Final flush had errors — offsets NOT committed to prevent data loss")
         consumer.close()
         flush_pool.shutdown(wait=True, cancel_futures=False)
+        if _dlq_producer:
+            try:
+                _dlq_producer.flush(timeout=10)
+            except Exception:
+                pass
         log.info("Consumer shut down cleanly.")
 
 

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { DEMO_MODE, demoInvestigationDetail } from "@/lib/demo-data";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://localhost:8200";
 
@@ -10,9 +9,6 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  /* ── Demo mode — instant response ── */
-  if (DEMO_MODE) return NextResponse.json(demoInvestigationDetail(params.id));
-
   try {
     const res = await fetch(
       `${AI_SERVICE_URL}/agents/investigations/${params.id}`,

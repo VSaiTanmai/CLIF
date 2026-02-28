@@ -1,0 +1,188 @@
+"""
+CLIF Triage Agent — Configuration
+===================================
+All configuration via environment variables with sensible production defaults.
+"""
+
+import os
+
+# ── Kafka / Redpanda ────────────────────────────────────────────────────────
+
+KAFKA_BROKERS = os.getenv("KAFKA_BROKERS", "redpanda01:9092")
+CONSUMER_GROUP_ID = os.getenv("CONSUMER_GROUP_ID", "clif-triage-agent")
+
+INPUT_TOPICS = [
+    t.strip()
+    for t in os.getenv(
+        "INPUT_TOPICS", "raw-logs,security-events,process-events,network-events"
+    ).split(",")
+]
+
+TOPIC_TEMPLATED_LOGS = os.getenv("TOPIC_TEMPLATED_LOGS", "templated-logs")
+TOPIC_TRIAGE_SCORES = os.getenv("TOPIC_TRIAGE_SCORES", "triage-scores")
+TOPIC_ANOMALY_ALERTS = os.getenv("TOPIC_ANOMALY_ALERTS", "anomaly-alerts")
+TOPIC_DEAD_LETTER = os.getenv("TOPIC_DEAD_LETTER", "dead-letter")
+
+# ── ClickHouse ──────────────────────────────────────────────────────────────
+
+CLICKHOUSE_HOST = os.getenv("CLICKHOUSE_HOST", "clickhouse01")
+CLICKHOUSE_PORT = int(os.getenv("CLICKHOUSE_PORT", "9000"))
+CLICKHOUSE_USER = os.getenv("CLICKHOUSE_USER", "clif_admin")
+CLICKHOUSE_PASSWORD = os.getenv("CLICKHOUSE_PASSWORD", "clif_secure_password_change_me")
+CLICKHOUSE_DB = os.getenv("CLICKHOUSE_DB", "clif_logs")
+
+# ── Drain3 ──────────────────────────────────────────────────────────────────
+
+DRAIN3_DEPTH = int(os.getenv("DRAIN3_DEPTH", "4"))
+DRAIN3_SIM_TH = float(os.getenv("DRAIN3_SIM_TH", "0.4"))
+DRAIN3_MAX_CHILDREN = int(os.getenv("DRAIN3_MAX_CHILDREN", "100"))
+DRAIN3_MAX_CLUSTERS = int(os.getenv("DRAIN3_MAX_CLUSTERS", "1024"))
+DRAIN3_STATE_PATH = os.getenv("DRAIN3_STATE_PATH", "/app/drain3_state.bin")
+DRAIN3_CONFIG_PATH = os.getenv("DRAIN3_CONFIG_PATH", "/app/drain3.ini")
+
+# ── Models ──────────────────────────────────────────────────────────────────
+
+MODEL_DIR = os.getenv("MODEL_DIR", "/models")
+MODEL_LGBM_PATH = os.getenv("MODEL_LGBM_PATH", "/models/lgbm_v1.0.0.onnx")
+MODEL_EIF_PATH = os.getenv("MODEL_EIF_PATH", "/models/eif_v1.0.0.pkl")
+MODEL_EIF_THRESHOLD_PATH = os.getenv(
+    "MODEL_EIF_THRESHOLD_PATH", "/models/eif_threshold.npy"
+)
+MODEL_ARF_CHECKPOINT = os.getenv("MODEL_ARF_CHECKPOINT", "/models/arf_v1.0.0.pkl")
+FEATURE_COLS_PATH = os.getenv("FEATURE_COLS_PATH", "/models/feature_cols.pkl")
+MANIFEST_PATH = os.getenv("MANIFEST_PATH", "/models/manifest.json")
+
+# ── Score Weights ───────────────────────────────────────────────────────────
+
+_raw_weights = os.getenv("SCORE_WEIGHTS", "lgbm=0.50,eif=0.30,arf=0.20")
+SCORE_WEIGHTS = {}
+for pair in _raw_weights.split(","):
+    k, v = pair.split("=")
+    SCORE_WEIGHTS[k.strip()] = float(v.strip())
+
+# ── Thresholds ──────────────────────────────────────────────────────────────
+
+DEFAULT_SUSPICIOUS_THRESHOLD = float(
+    os.getenv("DEFAULT_SUSPICIOUS_THRESHOLD", "0.70")
+)
+DEFAULT_ANOMALOUS_THRESHOLD = float(
+    os.getenv("DEFAULT_ANOMALOUS_THRESHOLD", "0.90")
+)
+DISAGREEMENT_THRESHOLD = float(os.getenv("DISAGREEMENT_THRESHOLD", "0.35"))
+
+# ── Operational ─────────────────────────────────────────────────────────────
+
+BATCH_SIZE = int(os.getenv("BATCH_SIZE", "1000"))
+INFERENCE_WORKERS = int(os.getenv("INFERENCE_WORKERS", "4"))
+FEATURE_STALENESS_TIMEOUT_SEC = int(
+    os.getenv("FEATURE_STALENESS_TIMEOUT_SEC", "300")
+)
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+HEALTH_PORT = int(os.getenv("TRIAGE_PORT", "8300"))
+
+# ── Connection Tracking Windows ─────────────────────────────────────────────
+
+CONN_TIME_WINDOW_SEC = float(os.getenv("CONN_TIME_WINDOW_SEC", "2.0"))
+CONN_HOST_WINDOW_SIZE = int(os.getenv("CONN_HOST_WINDOW_SIZE", "100"))
+CONN_CLEANUP_INTERVAL_SEC = float(os.getenv("CONN_CLEANUP_INTERVAL_SEC", "10.0"))
+
+# ── ARF Warm Restart Configuration ──────────────────────────────────────────
+# The ARF pickle file produces CONSTANT probabilities after deserialization
+# (upstream River bug). Production inference uses warm restart: a fresh model
+# replays recent events from ClickHouse arf_replay_buffer to rebuild
+# Hoeffding trees and ADWIN detectors. The pickle is retained as offline
+# reference only — it is NEVER loaded for production inference.
+
+ARF_WARM_RESTART = os.getenv("ARF_WARM_RESTART", "true").lower() == "true"
+ARF_REPLAY_HOURS = int(os.getenv("ARF_REPLAY_HOURS", "24"))
+ARF_REPLAY_MAX_ROWS = int(os.getenv("ARF_REPLAY_MAX_ROWS", "50000"))
+ARF_STREAM_CSV_PATH = os.getenv(
+    "ARF_STREAM_CSV_PATH", "/models/features_arf_stream_features.csv"
+)
+
+# ARF hyperparameters — must match training notebook exactly
+ARF_N_MODELS = int(os.getenv("ARF_N_MODELS", "10"))
+ARF_ADWIN_DELTA = float(os.getenv("ARF_ADWIN_DELTA", "0.002"))
+ARF_ADWIN_WARNING_DELTA = float(os.getenv("ARF_ADWIN_WARNING_DELTA", "0.01"))
+ARF_SEED = int(os.getenv("ARF_SEED", "42"))
+
+# ── Startup Self-Test ───────────────────────────────────────────────────────
+
+SELFTEST_ENABLED = os.getenv("SELFTEST_ENABLED", "true").lower() == "true"
+STARTUP_HEALTH_RETRIES = int(os.getenv("STARTUP_HEALTH_RETRIES", "30"))
+STARTUP_HEALTH_DELAY_SEC = float(os.getenv("STARTUP_HEALTH_DELAY_SEC", "2.0"))
+
+# ── Source Type Numeric Mapping ─────────────────────────────────────────────
+# Must match the encoding used during training (06_extract_features.py)
+
+SOURCE_TYPE_MAP = {
+    "syslog": 1,
+    "linux_auth": 1,
+    "windows_event": 2,
+    "winlogbeat": 2,
+    "wineventlog": 2,
+    "firewall": 3,
+    "cef": 3,
+    "active_directory": 4,
+    "ldap": 4,
+    "dns": 5,
+    "dns_logs": 5,
+    "cloudtrail": 6,
+    "aws_cloudtrail": 6,
+    "kubernetes": 7,
+    "k8s_audit": 7,
+    "nginx": 8,
+    "apache": 8,
+    "web_server": 8,
+    "netflow": 9,
+    "ipfix": 9,
+    "ids_ips": 10,
+    "zeek": 10,
+    "snort": 10,
+    "suricata": 10,
+    # Fallback mappings for Vector source types
+    "sshd": 1,
+    "sudo": 1,
+    "pam": 1,
+    "auditd": 1,
+    "sysmon": 2,
+    "docker_logs": 1,
+    "journald": 1,
+    "http_json": 1,
+    "file_logs": 1,
+    "unknown": 1,
+}
+
+# ── Protocol Numeric Mapping ────────────────────────────────────────────────
+
+PROTOCOL_MAP = {
+    "tcp": 6,
+    "udp": 17,
+    "icmp": 1,
+    "igmp": 2,
+    "gre": 47,
+    "esp": 50,
+    "ah": 51,
+    "sctp": 132,
+}
+
+# ── Severity Text → Numeric ────────────────────────────────────────────────
+
+SEVERITY_MAP = {
+    "info": 0,
+    "low": 1,
+    "medium": 2,
+    "high": 3,
+    "critical": 4,
+    # Also handle numeric-as-string and level names from Vector
+    "0": 0,
+    "1": 1,
+    "2": 2,
+    "3": 3,
+    "4": 4,
+    "debug": 0,
+    "INFO": 0,
+    "WARNING": 2,
+    "ERROR": 3,
+    "CRITICAL": 4,
+}

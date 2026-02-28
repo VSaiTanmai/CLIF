@@ -18,7 +18,6 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Shield,
   BrainCircuit,
   MessageSquare,
 } from "lucide-react";
@@ -87,7 +86,9 @@ export function Sidebar() {
       >
         {/* Logo */}
         <div className="flex h-14 items-center border-b px-4">
-          <Shield className="h-6 w-6 shrink-0 text-primary" />
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground text-sm font-bold">
+            N
+          </div>
           {!collapsed && (
             <span className="ml-2.5 text-base font-semibold tracking-tight">
               CLIF

@@ -3,7 +3,6 @@ import { rpGet } from "@/lib/redpanda";
 import { checkRateLimit, getClientId } from "@/lib/rate-limit";
 import { cached } from "@/lib/cache";
 import { log } from "@/lib/logger";
-import { DEMO_MODE, demoSystem } from "@/lib/demo-data";
 
 export const dynamic = "force-dynamic";
 
@@ -55,9 +54,6 @@ async function checkHealth(url: string, timeout = 3000): Promise<boolean> {
 }
 
 export async function GET(request: Request) {
-  /* ── Demo mode — instant response ── */
-  if (DEMO_MODE) return NextResponse.json(demoSystem());
-
   const limited = checkRateLimit(getClientId(request), RATE_LIMIT);
   if (limited) return limited;
 

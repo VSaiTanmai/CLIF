@@ -3,7 +3,6 @@ import { queryClickHouse } from "@/lib/clickhouse";
 import { cached } from "@/lib/cache";
 import { checkRateLimit, getClientId } from "@/lib/rate-limit";
 import { log } from "@/lib/logger";
-import { DEMO_MODE, demoAlerts } from "@/lib/demo-data";
 
 export const dynamic = "force-dynamic";
 
@@ -22,9 +21,6 @@ const ALERT_COLUMNS = [
 ].join(", ");
 
 export async function GET(request: Request) {
-  /* ── Demo mode — instant response ── */
-  if (DEMO_MODE) return NextResponse.json(demoAlerts());
-
   const rateLimited = checkRateLimit(getClientId(request), { maxTokens: 30, refillRate: 2 }, "/api/alerts");
   if (rateLimited) return rateLimited;
 

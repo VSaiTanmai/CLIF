@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getClientId } from "@/lib/rate-limit";
 import { log } from "@/lib/logger";
-import { DEMO_MODE, demoSemanticSearch } from "@/lib/demo-data";
 
 export const dynamic = "force-dynamic";
 
@@ -10,12 +9,6 @@ const RATE_LIMIT = { maxTokens: 30, refillRate: 3 };
 
 /** Proxy semantic search requests to the LanceDB service */
 export async function GET(req: NextRequest) {
-  /* ── Demo mode — instant response ── */
-  if (DEMO_MODE) {
-    const q = req.nextUrl.searchParams.get("q") || "";
-    return NextResponse.json(demoSemanticSearch(q));
-  }
-
   const limited = checkRateLimit(getClientId(req), RATE_LIMIT);
   if (limited) return limited;
 
@@ -65,12 +58,6 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  /* ── Demo mode — instant response ── */
-  if (DEMO_MODE) {
-    const body = await req.json();
-    return NextResponse.json(demoSemanticSearch(body.q || body.query || ""));
-  }
-
   const limited = checkRateLimit(getClientId(req), RATE_LIMIT);
   if (limited) return limited;
 

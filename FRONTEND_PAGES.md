@@ -11,7 +11,7 @@
 | Element | Details |
 |---------|---------|
 | **Sidebar** | Collapsible left panel with CLIF branding. 5 navigation sections, 12 items. Tooltip labels in collapsed mode. Icons from `lucide-react`. |
-| **Top Bar** | Sticky header with global search (`⌘K` shortcut), notification bell (live unread count badge), and user avatar (Sarah Chen / SOC Lead). |
+| **Top Bar** | Sticky header with global search (`⌘K` shortcut), notification bell (live unread count badge), and user avatar (Nethra / SOC Lead). |
 | **Notification Panel** | Dropdown from bell icon — **no hard cap**, fetches all severity ≥ 3 alerts. Severity filter tabs (All / Critical / High), mark-all-read button, read/unread visual state (blue left border + bold for unread), paginated "Show more (N remaining)" link. 420 px wide. |
 | **Error Boundary** | Global error boundary wrapping page content with fallback UI. |
 | **Toast System** | `sonner` toast notifications for actions throughout the app. |

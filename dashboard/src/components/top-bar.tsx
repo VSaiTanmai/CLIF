@@ -441,11 +441,11 @@ export function TopBar() {
           {/* User */}
           <div className="flex items-center gap-2 rounded-lg px-2 py-1">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900 text-sm font-semibold text-blue-600 dark:text-blue-400">
-              SC
+              N
             </div>
             <div className="hidden sm:block">
               <div className="text-sm font-medium text-foreground">
-                Sarah Chen
+                Nethra
               </div>
               <div className="text-[11px] text-gray-500 dark:text-neutral-400">SOC Lead</div>
             </div>

@@ -3,7 +3,6 @@ import { queryClickHouse } from "@/lib/clickhouse";
 import { cached, prewarm } from "@/lib/cache";
 import { checkRateLimit, getClientId } from "@/lib/rate-limit";
 import { log } from "@/lib/logger";
-import { DEMO_MODE, demoMetrics } from "@/lib/demo-data";
 
 export const dynamic = "force-dynamic";
 
@@ -37,12 +36,6 @@ async function fetchUptime(): Promise<string> {
 }
 
 export async function GET(request: Request) {
-  /* ── Demo mode — instant response ── */
-  if (DEMO_MODE) {
-    const { searchParams } = new URL(request.url);
-    return NextResponse.json(demoMetrics(searchParams.get("range") || "24h"));
-  }
-
   // Rate limiting
   const rateLimited = checkRateLimit(getClientId(request), { maxTokens: 30, refillRate: 2 }, "/api/metrics");
   if (rateLimited) return rateLimited;

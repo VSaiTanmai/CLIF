@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { queryClickHouse } from "@/lib/clickhouse";
 import { checkRateLimit, getClientId } from "@/lib/rate-limit";
 import { log } from "@/lib/logger";
-import { DEMO_MODE } from "@/lib/demo-data";
 
 export const dynamic = "force-dynamic";
 
@@ -41,45 +40,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: `Invalid format. Valid: ${validFormats.join(", ")}` }, { status: 400 });
   }
 
-  /* ── Demo mode — use fake data instead of ClickHouse ── */
-
   try {
     /* eslint-disable @typescript-eslint/no-explicit-any */
     let alerts: any[], evidence: any[], events: any[], mitre: any[], categories: any[];
 
-    if (DEMO_MODE) {
-      alerts = [
-        { event_id: "d3m0-0001", ts: new Date().toISOString(), severity: "4", category: "Credential Dumping", source: "Sysmon", description: "LSASS memory access from unsigned process", hostname: "DC-PRIMARY", user_id: "svc-admin", mitre_tactic: "credential_access", mitre_technique: "T1003.001" },
-        { event_id: "d3m0-0002", ts: new Date().toISOString(), severity: "4", category: "Lateral Movement", source: "Sysmon", description: "PsExec service installation from svc-admin", hostname: "WKS-FIN-042", user_id: "svc-admin", mitre_tactic: "lateral_movement", mitre_technique: "T1021.002" },
-        { event_id: "d3m0-0003", ts: new Date().toISOString(), severity: "3", category: "Suspicious PowerShell", source: "Sysmon", description: "Encoded PowerShell with C2 callback", hostname: "WKS-DEV-019", user_id: "jthompson", mitre_tactic: "execution", mitre_technique: "T1059.001" },
-        { event_id: "d3m0-0004", ts: new Date().toISOString(), severity: "3", category: "Privilege Escalation", source: "Windows Security", description: "Token impersonation via SeDebugPrivilege", hostname: "SQL-PROD-01", user_id: "SYSTEM", mitre_tactic: "privilege_escalation", mitre_technique: "T1134.001" },
-        { event_id: "d3m0-0005", ts: new Date().toISOString(), severity: "4", category: "Ransomware Indicator", source: "Sysmon", description: "Mass file rename with .encrypted extension", hostname: "FS-SHARE-01", user_id: "SYSTEM", mitre_tactic: "impact", mitre_technique: "T1486" },
-      ];
-      evidence = [
-        { batch_id: "batch-0001", created_at: new Date().toISOString(), table_name: "security_events", event_count: "4521", merkle_root: "a1b2c3d4e5f6", merkle_depth: "13", status: "Verified" },
-        { batch_id: "batch-0002", created_at: new Date().toISOString(), table_name: "raw_logs", event_count: "5200", merkle_root: "f6e5d4c3b2a1", merkle_depth: "13", status: "Verified" },
-      ];
-      events = [
-        { table_name: "raw_logs", cnt: "4765558" },
-        { table_name: "security_events", cnt: "5674661" },
-        { table_name: "process_events", cnt: "4788297" },
-        { table_name: "network_events", cnt: "6191079" },
-      ];
-      mitre = [
-        { technique: "T1059.001", tactic: "execution", cnt: "892" },
-        { technique: "T1055.012", tactic: "defense_evasion", cnt: "671" },
-        { technique: "T1003.001", tactic: "credential_access", cnt: "423" },
-        { technique: "T1071.001", tactic: "command_and_control", cnt: "384" },
-        { technique: "T1021.002", tactic: "lateral_movement", cnt: "267" },
-      ];
-      categories = [
-        { category: "Brute Force", cnt: "2341" },
-        { category: "Suspicious PowerShell", cnt: "1876" },
-        { category: "Lateral Movement", cnt: "1234" },
-        { category: "Process Injection", cnt: "987" },
-        { category: "Credential Dumping", cnt: "876" },
-      ];
-    } else {
     // Pull real data from ClickHouse
     const [alertsRes, evidenceRes, eventsRes, mitreRes, categoriesRes] = await Promise.allSettled([
       queryClickHouse<{
@@ -170,7 +134,6 @@ export async function GET(request: Request) {
     events = events2;
     mitre = mitre2;
     categories = categories2;
-    } // end else (non-demo)
 
     const now = new Date().toISOString();
     const totalEvents = events.reduce((s, e) => s + Number(e.cnt), 0);

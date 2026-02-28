@@ -3,7 +3,6 @@ import { queryClickHouse } from "@/lib/clickhouse";
 import { cached } from "@/lib/cache";
 import { checkRateLimit, getClientId } from "@/lib/rate-limit";
 import { log } from "@/lib/logger";
-import { DEMO_MODE, demoEventsSearch } from "@/lib/demo-data";
 
 export const dynamic = "force-dynamic";
 
@@ -27,15 +26,6 @@ const MAX_OFFSET = 100_000; // Prevent excessive OFFSET scans
 const RATE_LIMIT = { maxTokens: 30, refillRate: 2 };
 
 export async function GET(req: NextRequest) {
-  /* ── Demo mode — instant response ── */
-  if (DEMO_MODE) {
-    const q = req.nextUrl.searchParams.get("q") || "";
-    const t = req.nextUrl.searchParams.get("table") || "raw_logs";
-    const l = Number(req.nextUrl.searchParams.get("limit") || 50);
-    const o = Number(req.nextUrl.searchParams.get("offset") || 0);
-    return NextResponse.json(demoEventsSearch(q, t, l, o));
-  }
-
   const limited = checkRateLimit(getClientId(req), RATE_LIMIT, "/api/events/search");
   if (limited) return limited;
 

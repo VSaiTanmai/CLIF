@@ -25,7 +25,6 @@ import {
   Globe,
 } from "lucide-react";
 import type { DashboardMetrics } from "@/lib/types";
-import { DEMO_MODE } from "@/lib/demo-data";
 import {
   AreaChart,
   Area,
@@ -118,100 +117,6 @@ interface Investigation {
   confidence: number;
   verdict: string | null;
 }
-
-/* ── Demo alerts for presentation mode ── */
-const DEMO_ALERTS: Alert[] = [
-  {
-    event_id: "demo-001",
-    timestamp: new Date(Date.now() - 45_000).toISOString(),
-    severity: 4,
-    category: "Credential Dumping",
-    description: "LSASS memory access detected from unsigned process on DC-PRIMARY",
-    hostname: "DC-PRIMARY",
-    investigation_id: "inv-001",
-  },
-  {
-    event_id: "demo-002",
-    timestamp: new Date(Date.now() - 120_000).toISOString(),
-    severity: 4,
-    category: "Lateral Movement",
-    description: "PsExec service installation on WKS-FIN-042 from svc-admin account",
-    hostname: "WKS-FIN-042",
-    investigation_id: "inv-002",
-  },
-  {
-    event_id: "demo-003",
-    timestamp: new Date(Date.now() - 210_000).toISOString(),
-    severity: 3,
-    category: "Suspicious PowerShell",
-    description: "Encoded PowerShell command with network callback to external C2 IP",
-    hostname: "WKS-DEV-019",
-    investigation_id: "inv-003",
-  },
-  {
-    event_id: "demo-004",
-    timestamp: new Date(Date.now() - 340_000).toISOString(),
-    severity: 3,
-    category: "Privilege Escalation",
-    description: "Token impersonation via SeDebugPrivilege on SQL-PROD-01",
-    hostname: "SQL-PROD-01",
-    investigation_id: "inv-010",
-  },
-  {
-    event_id: "demo-005",
-    timestamp: new Date(Date.now() - 480_000).toISOString(),
-    severity: 3,
-    category: "Defense Evasion",
-    description: "Timestomping detected — PE file creation time set to 2019 on EXCH-EDGE",
-    hostname: "EXCH-EDGE",
-    investigation_id: "inv-005",
-  },
-  {
-    event_id: "demo-006",
-    timestamp: new Date(Date.now() - 550_000).toISOString(),
-    severity: 2,
-    category: "Anomalous DNS",
-    description: "High-entropy DNS queries to .xyz TLD — possible DNS tunneling",
-    hostname: "WKS-MKT-007",
-    investigation_id: "inv-007",
-  },
-  {
-    event_id: "demo-007",
-    timestamp: new Date(Date.now() - 680_000).toISOString(),
-    severity: 4,
-    category: "Ransomware Indicator",
-    description: "Mass file rename with .encrypted extension across shared drive",
-    hostname: "FS-SHARE-01",
-    investigation_id: "inv-009",
-  },
-  {
-    event_id: "demo-008",
-    timestamp: new Date(Date.now() - 780_000).toISOString(),
-    severity: 3,
-    category: "Brute Force",
-    description: "127 failed logins in 5 minutes for jthompson from 3 unique IPs",
-    hostname: "DC-PRIMARY",
-    investigation_id: "inv-006",
-  },
-  {
-    event_id: "demo-009",
-    timestamp: new Date(Date.now() - 900_000).toISOString(),
-    severity: 2,
-    category: "Data Exfiltration",
-    description: "Unusual 2.3GB upload to cloud storage bucket from backup-svc",
-    hostname: "BKP-SVR-02",
-    investigation_id: "inv-008",
-  },
-  {
-    event_id: "demo-010",
-    timestamp: new Date(Date.now() - 1_020_000).toISOString(),
-    severity: 3,
-    category: "Persistence",
-    description: "New scheduled task created with SYSTEM privileges — dropper.exe",
-    hostname: "WKS-HR-014",
-    investigation_id: "inv-004",
-  },
-];
 
 /* ── Sub-components ── */
 function KpiCard({
@@ -421,13 +326,10 @@ export default function DashboardPage() {
         if (res.ok) {
           const json = await res.json();
           let fetched = (json.alerts ?? []).filter((a: Alert) => a.severity >= 2);
-          if (DEMO_MODE && fetched.length < 5) {
-            fetched = DEMO_ALERTS;
-          }
           setAlerts(fetched);
         }
       } catch {
-        if (DEMO_MODE) setAlerts(DEMO_ALERTS);
+        // alerts fetch failed
       }
     };
     fetchAlerts();

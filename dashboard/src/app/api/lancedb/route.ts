@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getClientId } from "@/lib/rate-limit";
 import { log } from "@/lib/logger";
-import { DEMO_MODE, demoLanceDb } from "@/lib/demo-data";
 
 export const dynamic = "force-dynamic";
 
@@ -10,9 +9,6 @@ const RATE_LIMIT = { maxTokens: 10, refillRate: 1 };
 
 /** Query LanceDB service stats and table counts */
 export async function GET(req: NextRequest) {
-  /* ── Demo mode — instant response ── */
-  if (DEMO_MODE) return NextResponse.json(demoLanceDb());
-
   const limited = checkRateLimit(getClientId(req), RATE_LIMIT);
   if (limited) return limited;
 

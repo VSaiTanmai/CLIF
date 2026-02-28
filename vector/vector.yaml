@@ -313,6 +313,33 @@ transforms:
         .message = encode_json(.)
       }
 
+      # ── Extract message_body for Drain3 template mining ────────────────
+      # Drain3 accuracy drops ~40% if fed raw syslog lines with timestamp +
+      # hostname headers (IBM production finding). Strip known header
+      # patterns to isolate the log body for template mining.
+      #   "Jan  5 10:23:45 server01 sshd[1234]: Failed password" → "Failed password"
+      #   "2024-01-05T10:23:45Z server01 app: Error occurred"  → "Error occurred"
+      msg_body = to_string!(.message)
+
+      # Strip RFC 3164 syslog header: "Mon DD HH:MM:SS hostname proc[pid]: "
+      syslog_match, err = parse_regex(msg_body, r'^(?:\w{3}\s+\d{1,2}\s+[\d:]+\s+\S+\s+\S+(?:\[\d+\])?:\s*)(?P<body>.*)')
+      if err == null {
+        msg_body = syslog_match.body
+      }
+
+      # Strip ISO 8601 timestamp prefix: "2024-01-05T10:23:45... hostname: "
+      iso_match, err = parse_regex(msg_body, r'^(?:\d{4}[-/]\d{2}[-/]\d{2}[T ]\d{2}:\d{2}:\d{2}\S*\s+\S+[\s:]+)(?P<body>.*)')
+      if err == null {
+        msg_body = iso_match.body
+      }
+
+      .message_body = msg_body
+
+      # ── Normalize source_type for per-source adaptive thresholds ───────
+      # The Triage Agent uses source_type to look up per-source scoring
+      # thresholds (e.g., Kubernetes is noisier → higher threshold).
+      .source_type = .clif_source_type
+
   # ── Step 2: Security Event Classification ─────────────────────────────────
   # Classify events as security-relevant based on content patterns.
   # This runs VRL pattern matching against known security indicators.
@@ -547,11 +574,13 @@ transforms:
       lvl = if exists(.level) { to_string!(.level) } else { "INFO" }
       src = if exists(.source) { to_string!(.source) } else { "vector" }
       msg = if exists(.message) { to_string!(.message) } else { "" }
+      mb = if exists(.message_body) { to_string!(.message_body) } else { msg }
+      st = if exists(.source_type) { to_string!(.source_type) } else { src }
       meta = if exists(.metadata) { .metadata } else { {} }
       if exists(.user_id) { meta.user_id = to_string!(.user_id) }
       if exists(.ip_address) { meta.ip_address = to_string!(.ip_address) }
       if exists(.request_id) { meta.request_id = to_string!(.request_id) }
-      . = { "timestamp": ts, "level": lvl, "source": src, "message": msg, "metadata": meta }
+      . = { "timestamp": ts, "level": lvl, "source": src, "message": msg, "message_body": mb, "source_type": st, "metadata": meta }
 
   # ── Format: Security Events (matches security_events table) ──────────────
   format_security:
@@ -572,7 +601,9 @@ transforms:
       mt = if exists(.mitre_tactic) { to_string!(.mitre_tactic) } else { "" }
       mte = if exists(.mitre_technique) { to_string!(.mitre_technique) } else { "" }
       meta = if exists(.metadata) { .metadata } else { {} }
-      . = { "timestamp": ts, "severity": sev, "category": cat, "source": src, "description": desc, "user_id": uid, "ip_address": ip, "hostname": hn, "mitre_tactic": mt, "mitre_technique": mte, "ai_confidence": 0.0, "ai_explanation": "", "metadata": meta }
+      mb = if exists(.message_body) { to_string!(.message_body) } else { desc }
+      st = if exists(.source_type) { to_string!(.source_type) } else { src }
+      . = { "timestamp": ts, "severity": sev, "category": cat, "source": src, "description": desc, "user_id": uid, "ip_address": ip, "hostname": hn, "mitre_tactic": mt, "mitre_technique": mte, "ai_confidence": 0.0, "ai_explanation": "", "message_body": mb, "source_type": st, "metadata": meta }
 
   # ── Format: Process Events (matches process_events table) ────────────────
   format_process:
@@ -605,7 +636,9 @@ transforms:
       ns_val = if exists(.namespace) { to_string!(.namespace) } else { "" }
       sc = if exists(.syscall) { to_string!(.syscall) } else { "" }
       meta = if exists(.metadata) { .metadata } else { {} }
-      . = { "timestamp": ts, "hostname": hn, "pid": p, "ppid": pp, "uid": u, "gid": g, "binary_path": bp, "arguments": args, "cwd": cwd_val, "exit_code": ec, "container_id": cid, "pod_name": pn, "namespace": ns_val, "syscall": sc, "is_suspicious": 0, "detection_rule": "", "metadata": meta }
+      mb = if exists(.message_body) { to_string!(.message_body) } else { "" }
+      st = if exists(.source_type) { to_string!(.source_type) } else { "" }
+      . = { "timestamp": ts, "hostname": hn, "pid": p, "ppid": pp, "uid": u, "gid": g, "binary_path": bp, "arguments": args, "cwd": cwd_val, "exit_code": ec, "container_id": cid, "pod_name": pn, "namespace": ns_val, "syscall": sc, "is_suspicious": 0, "detection_rule": "", "message_body": mb, "source_type": st, "metadata": meta }
 
   # ── Format: Network Events (matches network_events table) ────────────────
   format_network:
@@ -644,7 +677,9 @@ transforms:
       dq = if exists(.dns_query) { to_string!(.dns_query) } else { "" }
       gc = if exists(.geo_country) { to_string!(.geo_country) } else { "" }
       meta = if exists(.metadata) { .metadata } else { {} }
-      . = { "timestamp": ts, "hostname": hn, "src_ip": si, "src_port": sp, "dst_ip": di, "dst_port": dp, "protocol": proto, "direction": dir, "bytes_sent": bs, "bytes_received": br, "duration_ms": dur, "pid": p, "binary_path": bp, "container_id": cid, "pod_name": pn, "namespace": ns, "dns_query": dq, "geo_country": gc, "is_suspicious": 0, "detection_rule": "", "metadata": meta }
+      mb = if exists(.message_body) { to_string!(.message_body) } else { "" }
+      st = if exists(.source_type) { to_string!(.source_type) } else { "" }
+      . = { "timestamp": ts, "hostname": hn, "src_ip": si, "src_port": sp, "dst_ip": di, "dst_port": dp, "protocol": proto, "direction": dir, "bytes_sent": bs, "bytes_received": br, "duration_ms": dur, "pid": p, "binary_path": bp, "container_id": cid, "pod_name": pn, "namespace": ns, "dns_query": dq, "geo_country": gc, "is_suspicious": 0, "detection_rule": "", "message_body": mb, "source_type": st, "metadata": meta }
 
   # ── Deduplicate high-volume sources ───────────────────────────────────────
   # Prevent duplicate events from retry storms or multi-source overlap.

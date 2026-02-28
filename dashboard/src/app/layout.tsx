@@ -5,7 +5,6 @@ import { TopBar } from "@/components/top-bar";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { KeyboardShortcutsProvider } from "@/components/keyboard-shortcuts-provider";
 import { ThemeProvider, DynamicToaster } from "@/components/theme-provider";
-import { DemoPrefetcher } from "@/components/demo-prefetcher";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
@@ -43,7 +42,6 @@ export default function RootLayout({
           </div>
           <DynamicToaster />
           <KeyboardShortcutsProvider />
-          <DemoPrefetcher />
         </ThemeProvider>
       </body>
     </html>

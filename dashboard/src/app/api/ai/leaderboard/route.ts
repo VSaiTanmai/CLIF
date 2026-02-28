@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { DEMO_MODE, demoAiLeaderboard } from "@/lib/demo-data";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://localhost:8200";
 
@@ -7,9 +6,6 @@ const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://localhost:8200";
  * GET /api/ai/leaderboard — Get the ML model training leaderboard
  */
 export async function GET() {
-  /* ── Demo mode — instant response ── */
-  if (DEMO_MODE) return NextResponse.json(demoAiLeaderboard());
-
   try {
     const res = await fetch(`${AI_SERVICE_URL}/model/leaderboard`, {
       cache: "no-store",
