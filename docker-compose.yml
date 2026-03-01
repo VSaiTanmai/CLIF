@@ -916,38 +916,6 @@ services:
           cpus: '0.5'
           memory: 1G
   # =========================================================================
-  # AI Classifier Service — Tier-2 ML-based Security Event Classification
-  # =========================================================================
-  ai-classifier:
-    container_name: clif-ai-classifier
-    build:
-      context: ./ai-agents
-      dockerfile: Dockerfile
-    environment:
-      AI_SERVICE_PORT: 8200
-    ports:
-      - "8200:8200"
-    networks:
-      - clif-backend
-      - clif-frontend
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8200/health')\""]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    logging: *default-logging
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 2G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
-
-  # =========================================================================
   # Triage Agent — 3-Model ML Ensemble (LightGBM ONNX + EIF + River ARF)
   # =========================================================================
   # Consumes from: raw-logs, security-events, process-events, network-events
@@ -1019,6 +987,8 @@ services:
       LOG_LEVEL: INFO
     volumes:
       - ./agents/triage/models:/models:ro
+    ports:
+      - "8300:8300"
     depends_on:
       redpanda01:
         condition: service_healthy
@@ -1045,115 +1015,3 @@ services:
         reservations:
           cpus: '1'
           memory: 1G
-
-  # =========================================================================
-  # Hunter Agent — Deep Investigation of Escalated Anomalies
-  # =========================================================================
-  # Consumes from: hunter-tasks (routed from Triage anomaly-alerts)
-  # Produces to:   hunter-results, verifier-tasks, dead-letter
-  # =========================================================================
-  clif-hunter-agent:
-    container_name: clif-hunter-agent
-    build:
-      context: ./agents/hunter
-      dockerfile: Dockerfile
-    environment:
-      KAFKA_BROKERS: "redpanda01:9092,redpanda02:9092,redpanda03:9092"
-      CONSUMER_GROUP_ID: "clif-hunter-agent"
-      INPUT_TOPICS: "hunter-tasks"
-      TOPIC_HUNTER_RESULTS: "hunter-results"
-      TOPIC_VERIFIER_TASKS: "verifier-tasks"
-      TOPIC_DEAD_LETTER: "dead-letter"
-      CLICKHOUSE_HOST: clickhouse01
-      CLICKHOUSE_PORT: ${CLICKHOUSE_NATIVE_PORT:-9000}
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-clif_admin}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clif_secure_password_change_me}
-      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-clif_logs}
-      # ── Investigation config ──
-      CORRELATION_WINDOW_MINUTES: "30"
-      MAX_CORRELATED_EVENTS: "1000"
-      INVESTIGATION_TIMEOUT_SEC: "120"
-      LOG_LEVEL: INFO
-    depends_on:
-      redpanda01:
-        condition: service_healthy
-      clickhouse01:
-        condition: service_healthy
-      redpanda-init:
-        condition: service_completed_successfully
-    networks:
-      - clif-backend
-      - clif-storage
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8400/health')\""]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    logging: *default-logging
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 3G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
-
-  # =========================================================================
-  # Verifier Agent — Forensic Evidence Verification & Correlation
-  # =========================================================================
-  # Consumes from: verifier-tasks (routed from Hunter)
-  # Produces to:   verifier-results, feedback-labels, dead-letter
-  # =========================================================================
-  clif-verifier-agent:
-    container_name: clif-verifier-agent
-    build:
-      context: ./agents/verifier
-      dockerfile: Dockerfile
-    environment:
-      KAFKA_BROKERS: "redpanda01:9092,redpanda02:9092,redpanda03:9092"
-      CONSUMER_GROUP_ID: "clif-verifier-agent"
-      INPUT_TOPICS: "verifier-tasks"
-      TOPIC_VERIFIER_RESULTS: "verifier-results"
-      TOPIC_FEEDBACK_LABELS: "feedback-labels"
-      TOPIC_DEAD_LETTER: "dead-letter"
-      CLICKHOUSE_HOST: clickhouse01
-      CLICKHOUSE_PORT: ${CLICKHOUSE_NATIVE_PORT:-9000}
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-clif_admin}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clif_secure_password_change_me}
-      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-clif_logs}
-      # ── Verification config ──
-      MERKLE_SERVICE_URL: "http://clif-merkle:9400"
-      IOC_CACHE_TABLE: "ioc_cache"
-      EVIDENCE_CHAIN_VERIFY: "true"
-      LOG_LEVEL: INFO
-    depends_on:
-      redpanda01:
-        condition: service_healthy
-      clickhouse01:
-        condition: service_healthy
-      clif-merkle:
-        condition: service_healthy
-      redpanda-init:
-        condition: service_completed_successfully
-    networks:
-      - clif-backend
-      - clif-storage
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8500/health')\""]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    logging: *default-logging
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 2G
-        reservations:
-          cpus: '0.5'
-          memory: 512M

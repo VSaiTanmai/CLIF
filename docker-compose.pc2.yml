@@ -209,38 +209,6 @@ services:
           memory: 1.5G
 
   # =========================================================================
-  # AI Classifier Service
-  # =========================================================================
-  ai-classifier:
-    container_name: clif-ai-classifier
-    build:
-      context: ./ai-agents
-      dockerfile: Dockerfile
-    environment:
-      AI_SERVICE_PORT: 8200
-    ports:
-      - "8200:8200"
-    networks:
-      - clif-backend
-      - clif-frontend
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8200/health')\""]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    logging: *default-logging
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 2G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
-
-  # =========================================================================
   # Triage Agent — Drain3 Template Mining + ML Scoring
   # =========================================================================
   clif-triage-agent:
@@ -318,97 +286,6 @@ services:
         reservations:
           cpus: '1'
           memory: 1G
-
-  # =========================================================================
-  # Hunter Agent — Deep Investigation of Escalated Anomalies
-  # =========================================================================
-  clif-hunter-agent:
-    container_name: clif-hunter-agent
-    build:
-      context: ./agents/hunter
-      dockerfile: Dockerfile
-    <<: *pc1-hosts
-    environment:
-      KAFKA_BROKERS: "${DATA_IP}:19092,${DATA_IP}:29092,${DATA_IP}:39092"
-      CONSUMER_GROUP_ID: "clif-hunter-agent"
-      INPUT_TOPICS: "hunter-tasks"
-      TOPIC_HUNTER_RESULTS: "hunter-results"
-      TOPIC_VERIFIER_TASKS: "verifier-tasks"
-      TOPIC_DEAD_LETTER: "dead-letter"
-      CLICKHOUSE_HOST: ${DATA_IP}
-      CLICKHOUSE_PORT: ${CLICKHOUSE_NATIVE_PORT:-9000}
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-clif_admin}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clif_secure_password_change_me}
-      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-clif_logs}
-      CORRELATION_WINDOW_MINUTES: "30"
-      MAX_CORRELATED_EVENTS: "1000"
-      INVESTIGATION_TIMEOUT_SEC: "120"
-      LOG_LEVEL: INFO
-    networks:
-      - clif-backend
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8400/health')\""]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    logging: *default-logging
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 3G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
-
-  # =========================================================================
-  # Verifier Agent — Forensic Evidence Verification & Correlation
-  # =========================================================================
-  clif-verifier-agent:
-    container_name: clif-verifier-agent
-    build:
-      context: ./agents/verifier
-      dockerfile: Dockerfile
-    <<: *pc1-hosts
-    environment:
-      KAFKA_BROKERS: "${DATA_IP}:19092,${DATA_IP}:29092,${DATA_IP}:39092"
-      CONSUMER_GROUP_ID: "clif-verifier-agent"
-      INPUT_TOPICS: "verifier-tasks"
-      TOPIC_VERIFIER_RESULTS: "verifier-results"
-      TOPIC_FEEDBACK_LABELS: "feedback-labels"
-      TOPIC_DEAD_LETTER: "dead-letter"
-      CLICKHOUSE_HOST: ${DATA_IP}
-      CLICKHOUSE_PORT: ${CLICKHOUSE_NATIVE_PORT:-9000}
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-clif_admin}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clif_secure_password_change_me}
-      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-clif_logs}
-      MERKLE_SERVICE_URL: "http://clif-merkle:9400"
-      IOC_CACHE_TABLE: "ioc_cache"
-      EVIDENCE_CHAIN_VERIFY: "true"
-      LOG_LEVEL: INFO
-    depends_on:
-      clif-merkle:
-        condition: service_healthy
-    networks:
-      - clif-backend
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8500/health')\""]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    logging: *default-logging
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 2G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
 
   # =========================================================================
   # Prometheus  (always-on — scrapes both PC1 data tier & PC2 compute tier)

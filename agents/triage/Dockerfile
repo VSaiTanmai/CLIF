@@ -15,10 +15,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# System dependencies required by confluent-kafka (librdkafka) and numpy
+# System dependencies required by confluent-kafka (librdkafka) and eif (C++ Cython)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         build-essential \
+        g++ \
         librdkafka-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*

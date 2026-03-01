@@ -7,7 +7,8 @@ numpy>=1.24,<2.0
 joblib>=1.3
 scikit-learn>=1.3          # Dependency for EIF/joblib deserialization
 river>=0.21                # Adaptive Random Forest online learner
-eif>=2.0                   # Extended Isolation Forest
+typing_extensions>=4.0     # Required by river.base
+eif==1.0.2                   # Extended Isolation Forest (pure Python — pickle-compatible)
 
 # Log Template Mining
 drain3>=0.9.11

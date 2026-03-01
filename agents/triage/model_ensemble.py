@@ -177,7 +177,7 @@ class AdaptiveRandomForest:
     """
 
     def __init__(self, feature_cols: List[str]):
-        from river.ensemble import AdaptiveRandomForestClassifier
+        from river.forest import ARFClassifier
         from river.drift import ADWIN
 
         self._feature_cols = feature_cols
@@ -185,7 +185,7 @@ class AdaptiveRandomForest:
         self._rows_replayed = 0
 
         # Create a fresh ARF with the EXACT same hyperparameters as training
-        self._model = AdaptiveRandomForestClassifier(
+        self._model = ARFClassifier(
             n_models=config.ARF_N_MODELS,
             drift_detector=ADWIN(delta=config.ARF_ADWIN_DELTA),
             warning_detector=ADWIN(delta=config.ARF_ADWIN_WARNING_DELTA),
