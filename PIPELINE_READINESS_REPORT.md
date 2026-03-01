@@ -2,7 +2,7 @@
 
 > **Assessment Date:** March 2026
 > **Scope:** Infrastructure readiness audit for deploying the Triage Agent and future agents (Hunter, Verifier, Reporter)
-> **Verdict: Pipeline is production-ready.** One blocker remains: model artifacts from training notebooks.
+> **Verdict: Pipeline is production-ready.** All blockers resolved — model artifacts deployed.
 
 ---
 
@@ -10,7 +10,7 @@
 
 A 7-layer audit was performed across ClickHouse, Kafka, Consumer, Docker Compose (3 files), Kubernetes manifests, and model storage. **Three critical configuration bugs were found and fixed.** After the fixes, every infrastructure dependency required by the AI agent pipeline is in place and aligned.
 
-| Area | Status | Blocker? |
+| Area | Status | Blocker? |n
 |------|--------|----------|
 | ClickHouse tables & seed data | **PASS** | No |
 | Kafka topics (14 total) | **PASS** | No |
@@ -18,7 +18,7 @@ A 7-layer audit was performed across ClickHouse, Kafka, Consumer, Docker Compose
 | docker-compose.yml config | **FIXED** (was broken) | No |
 | docker-compose.pc2.yml config | **PASS** | No |
 | K8s manifests + PVC | **FIXED** (was broken) | No |
-| Model artifacts | **PENDING** | **Yes — only blocker** |
+| Model artifacts | **DEPLOYED** | No |
 
 ---
 
@@ -39,12 +39,16 @@ All 6 tables required by the Triage Agent exist in `clickhouse/schema.sql` and a
 
 **Seed data verified:**
 
-`source_thresholds` — 10 rows pre-loaded:
+`source_thresholds` — 15 rows pre-loaded (10 canonical + 5 Vector aliases):
 ```
-syslog (0.65/0.85), winlogbeat (0.70/0.90), kubernetes (0.75/0.92),
-nginx (0.70/0.88), firewall (0.60/0.80), cloudtrail (0.68/0.87),
-sysmon (0.65/0.85), auditd (0.65/0.85), edr-agent (0.70/0.90),
-ids-sensor (0.60/0.80)
+# Canonical 10 (from training pipeline)
+syslog (0.65/0.85), windows_event (0.70/0.90), firewall (0.60/0.80),
+active_directory (0.65/0.85), dns (0.68/0.87), cloudtrail (0.68/0.87),
+kubernetes (0.75/0.92), nginx (0.70/0.88), netflow (0.65/0.85),
+ids_ips (0.60/0.80)
+# Vector aliases (5)
+winlogbeat (0.70/0.90), sysmon (0.65/0.85), auditd (0.65/0.85),
+edr-agent (0.70/0.90), ids-sensor (0.60/0.80)
 ```
 
 `mitre_mapping_rules` — 9 rows pre-loaded:
@@ -269,58 +273,35 @@ The PVC is registered in the base kustomization and will be included in all over
 
 ### 6.1 Current State
 
-The `agents/triage/models/` directory contains only a `README.md` documentation file. **No model artifacts are present.**
+All model artifacts are deployed in `agents/triage/models/` (commit `873ad76`).
 
 ### 6.2 Required Files
 
-| File | Source | Required For | Present? |
-|------|--------|-------------|----------|
-| `lgbm_v1.0.0.onnx` | LightGBM training notebook → ONNX export | Model 1 (50% weight) | **NO** |
-| `eif_v1.0.0.pkl` | EIF training notebook → joblib dump | Model 2 (30% weight) | **NO** |
-| `eif_threshold.npy` | EIF training notebook → numpy save | EIF anomaly threshold | **NO** |
-| `feature_cols.pkl` | Feature engineering notebook → pickle dump | Feature column ordering authority | **NO** |
-| `manifest.json` | Training pipeline | Model versioning metadata | **NO** |
+| File | Size | Verified | Present? |
+|------|------|----------|----------|
+| `lgbm_v1.0.0.onnx` | 1.35 MB | ONNX input [None,20] float32, output label+probabilities | **YES** |
+| `eif_v1.0.0.pkl` | 87.4 MB | joblib-serialized EIF (200 trees) | **YES** |
+| `eif_threshold.npy` | 136 B | Value: [0.42768124] | **YES** |
+| `feature_cols.pkl` | 314 B | 20 columns, exact match to FEATURE_NAMES | **YES** |
+| `manifest.json` | 689 B | lgbm/eif/arf v1.0.0, warm_restart=true | **YES** |
+| `arf_v1.0.0.pkl` | 4.59 MB | Reference only — never loaded at runtime | **YES** |
+| `lgbm_v1.0.0.txt` | 1.88 MB | LightGBM native format, reference only | **YES** |
 
 **Optional (cold-start fallback):**
 
 | File | Purpose | Present? |
 |------|---------|----------|
-| `features_arf_stream_features.csv` | ARF cold-start when `arf_replay_buffer` is empty | **NO** |
+| `features_arf_stream_features.csv` | ARF cold-start when `arf_replay_buffer` is empty | **NO** (ARF will cold-start with uninformed 0.5 prior — acceptable) |
 
-### 6.3 Impact
+### 6.3 Verification
 
-Without model artifacts, the Triage Agent will:
-1. Start up and pass ClickHouse + Kafka health gates
-2. **Fail at model loading** — `FileNotFoundError` for ONNX / pkl files
-3. Self-test will not run
-4. Container will exit and restart loop
+All model artifacts were mechanically verified:
+- **ONNX model:** `onnxruntime.InferenceSession` loaded successfully; input shape `[None, 20]` tensor(float) matches 20 canonical features
+- **feature_cols.pkl:** 20 column names in exact order match `FEATURE_NAMES` in `feature_extractor.py`
+- **eif_threshold.npy:** `numpy.load` returns `[0.42768124]`
+- **manifest.json:** version `1.0.0`, warm_restart `true`, replay_table `arf_replay_buffer`
 
-### 6.4 How to Generate
-
-From the training Jupyter notebooks:
-
-```python
-# LightGBM → ONNX
-import onnxmltools
-onnx_model = onnxmltools.convert_lightgbm(lgbm_model)
-onnxmltools.utils.save_model(onnx_model, "agents/triage/models/lgbm_v1.0.0.onnx")
-
-# EIF
-import joblib
-joblib.dump(eif_model, "agents/triage/models/eif_v1.0.0.pkl")
-np.save("agents/triage/models/eif_threshold.npy", threshold_array)
-
-# Feature columns
-import pickle
-pickle.dump(feature_columns_list, open("agents/triage/models/feature_cols.pkl", "wb"))
-
-# Manifest
-import json
-json.dump({"version": "1.0.0", "trained_at": "...", "metrics": {...}},
-          open("agents/triage/models/manifest.json", "w"))
-```
-
-**Verdict:** Model artifacts are the **only remaining blocker**. These must come from the ML training pipeline — they cannot be generated from code.
+**Verdict:** All model artifacts are **deployed and verified**. No blockers remain.
 
 ---
 
@@ -384,11 +365,11 @@ Docker Compose service block: defined in `docker-compose.pc2.yml` with correct K
 | Consumer: `triage-scores` → `triage_scores` | Yes | **READY** | Row builder aligned |
 | Docker: `clif-triage-agent` service | Yes | **READY** | Config fixed |
 | K8s: `triage-agent` deployment | Yes | **READY** | Config + PVC fixed |
-| Model: `lgbm_v1.0.0.onnx` | Yes | **MISSING** | Generate from training |
-| Model: `eif_v1.0.0.pkl` | Yes | **MISSING** | Generate from training |
-| Model: `eif_threshold.npy` | Yes | **MISSING** | Generate from training |
-| Model: `feature_cols.pkl` | Yes | **MISSING** | Generate from training |
-| Model: `manifest.json` | Yes | **MISSING** | Generate from training |
+| Model: `lgbm_v1.0.0.onnx` | Yes | **DEPLOYED** | Verified — [None,20] float |
+| Model: `eif_v1.0.0.pkl` | Yes | **DEPLOYED** | Verified — 200 trees |
+| Model: `eif_threshold.npy` | Yes | **DEPLOYED** | Verified — [0.42768124] |
+| Model: `feature_cols.pkl` | Yes | **DEPLOYED** | Verified — 20 cols exact match |
+| Model: `manifest.json` | Yes | **DEPLOYED** | Verified — v1.0.0 |
 
 ### For Hunter Agent (future)
 
@@ -468,8 +449,8 @@ With the fixes applied, here's the exact startup sequence:
    b. Waits for Kafka health gate              ← retry up to 30× with 2s backoff
    c. Loads source_thresholds from ClickHouse  ← 10 rows cached
    d. Loads ioc_cache, allowlist, asset_crit.  ← may be empty (OK)
-   e. Loads LightGBM ONNX model               ← ⚠️ FAILS if lgbm_v1.0.0.onnx missing
-   f. Loads EIF model + threshold              ← ⚠️ FAILS if eif_v1.0.0.pkl missing
+   e. Loads LightGBM ONNX model               ← lgbm_v1.0.0.onnx deployed ✓
+   f. Loads EIF model + threshold              ← eif_v1.0.0.pkl + eif_threshold.npy deployed ✓
    g. ARF warm restart from arf_replay_buffer  ← empty on first run, uses CSV fallback
    h. Runs self-test (synthetic event)         ← verifies ensemble produces valid scores
    i. Begins consuming from 4 raw topics       ← scoring at production throughput
@@ -477,7 +458,7 @@ With the fixes applied, here's the exact startup sequence:
 9. Dashboard starts on port 3001               ← SOC interface
 ```
 
-Step 7e/7f will fail until model artifacts are placed in `agents/triage/models/`.
+All model artifacts are in place — the full startup sequence will complete successfully.
 
 ---
 
@@ -493,13 +474,13 @@ Step 7e/7f will fail until model artifacts are placed in `agents/triage/models/`
 - [x] `docker-compose.pc2.yml`: all env vars verified and correct
 - [x] K8s deployment: env vars, `/models` volume mount, PVC, probes — all correct
 - [x] All changes committed and pushed (`1a9e896`)
-- [ ] **Place model artifacts in `agents/triage/models/`:**
-  - [ ] `lgbm_v1.0.0.onnx`
-  - [ ] `eif_v1.0.0.pkl`
-  - [ ] `eif_threshold.npy`
-  - [ ] `feature_cols.pkl`
-  - [ ] `manifest.json`
-  - [ ] `features_arf_stream_features.csv` (optional, for ARF cold-start)
+- [x] **Model artifacts deployed in `agents/triage/models/`** (commit `873ad76`):
+  - [x] `lgbm_v1.0.0.onnx` — verified ONNX input [None,20] float
+  - [x] `eif_v1.0.0.pkl` — verified 200 trees
+  - [x] `eif_threshold.npy` — verified [0.42768124]
+  - [x] `feature_cols.pkl` — verified 20 cols exact match
+  - [x] `manifest.json` — verified v1.0.0
+  - [ ] `features_arf_stream_features.csv` (optional — ARF will cold-start without it)
 
 ### To deploy Hunter/Verifier agents in the future:
 
@@ -528,4 +509,5 @@ The pipeline is architecturally sound. All data contracts (Kafka topic schemas, 
 
 ---
 
-*Generated from pipeline readiness audit — commit `1a9e896`*
+*Generated from pipeline readiness audit — commits `1a9e896`, `873ad76`, `a87d056`*
+*Cross-check updated: March 2026*

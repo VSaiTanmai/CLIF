@@ -159,9 +159,11 @@ services:
 
   # =========================================================================
   # LanceDB — Semantic Vector Search & RAG Engine
+  # Disabled during pipeline testing. Enable with: docker compose --profile full up
   # =========================================================================
   lancedb:
     container_name: clif-lancedb
+    profiles: [full]
     build:
       context: ./lancedb-service
       dockerfile: Dockerfile
