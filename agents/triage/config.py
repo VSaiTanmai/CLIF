@@ -48,6 +48,9 @@ MODEL_EIF_PATH = os.getenv("MODEL_EIF_PATH", "/models/eif_v1.0.0.pkl")
 MODEL_EIF_THRESHOLD_PATH = os.getenv(
     "MODEL_EIF_THRESHOLD_PATH", "/models/eif_threshold.npy"
 )
+MODEL_EIF_CALIBRATION_PATH = os.getenv(
+    "MODEL_EIF_CALIBRATION_PATH", "/models/eif_calibration.npz"
+)
 MODEL_ARF_CHECKPOINT = os.getenv("MODEL_ARF_CHECKPOINT", "/models/arf_v1.0.0.pkl")
 FEATURE_COLS_PATH = os.getenv("FEATURE_COLS_PATH", "/models/feature_cols.pkl")
 MANIFEST_PATH = os.getenv("MANIFEST_PATH", "/models/manifest.json")
@@ -62,13 +65,16 @@ for pair in _raw_weights.split(","):
 
 # ── Thresholds ──────────────────────────────────────────────────────────────
 
+# Thresholds calibrated from training data score distributions:
+# Normal p95 combined ≈ 0.43, Malicious p50 combined ≈ 0.82
+# Previous 0.70/0.90 was unreachable without IOC multiplier.
 DEFAULT_SUSPICIOUS_THRESHOLD = float(
-    os.getenv("DEFAULT_SUSPICIOUS_THRESHOLD", "0.70")
+    os.getenv("DEFAULT_SUSPICIOUS_THRESHOLD", "0.45")
 )
 DEFAULT_ANOMALOUS_THRESHOLD = float(
-    os.getenv("DEFAULT_ANOMALOUS_THRESHOLD", "0.90")
+    os.getenv("DEFAULT_ANOMALOUS_THRESHOLD", "0.78")
 )
-DISAGREEMENT_THRESHOLD = float(os.getenv("DISAGREEMENT_THRESHOLD", "0.35"))
+DISAGREEMENT_THRESHOLD = float(os.getenv("DISAGREEMENT_THRESHOLD", "0.30"))
 
 # ── Operational ─────────────────────────────────────────────────────────────
 
@@ -105,6 +111,33 @@ ARF_N_MODELS = int(os.getenv("ARF_N_MODELS", "10"))
 ARF_ADWIN_DELTA = float(os.getenv("ARF_ADWIN_DELTA", "0.002"))
 ARF_ADWIN_WARNING_DELTA = float(os.getenv("ARF_ADWIN_WARNING_DELTA", "0.01"))
 ARF_SEED = int(os.getenv("ARF_SEED", "42"))
+
+# ARF confidence ramp: ARF weight scales from 0→1 over this many samples.
+# This prevents the cold-start ARF (near-constant ~0.074) from adding dead
+# weight to the combined score. The ARF's full 20% weight is only reached
+# after learning from this many events.
+ARF_CONFIDENCE_RAMP_SAMPLES = int(os.getenv("ARF_CONFIDENCE_RAMP_SAMPLES", "10000"))
+
+# ARF label source: 'lgbm_pseudo' uses high-confidence LightGBM predictions
+# as pseudo-labels (avoids label leakage from using the combined score).
+# 'combined' uses the old behavior (action == escalate → 1).
+ARF_LABEL_SOURCE = os.getenv("ARF_LABEL_SOURCE", "lgbm_pseudo")
+ARF_PSEUDO_LABEL_HIGH = float(os.getenv("ARF_PSEUDO_LABEL_HIGH", "0.80"))
+ARF_PSEUDO_LABEL_LOW = float(os.getenv("ARF_PSEUDO_LABEL_LOW", "0.20"))
+
+# ── Template Rarity & IOC Post-Model Boost ──────────────────────────────────
+# template_rarity and threat_intel_flag were CONSTANT in training data (0.5 and 0
+# respectively), so the models never learned from them. Instead of model features,
+# they are applied as post-model score adjusters in the fusion layer.
+# Rare templates (< RARE_THRESHOLD) and IOC matches boost the score by up to
+# BOOST_MAX_PCT percent.
+TEMPLATE_RARITY_RARE_THRESHOLD = float(
+    os.getenv("TEMPLATE_RARITY_RARE_THRESHOLD", "0.15")
+)
+TEMPLATE_RARITY_BOOST_MAX = float(
+    os.getenv("TEMPLATE_RARITY_BOOST_MAX", "0.10")
+)
+IOC_MATCH_SCORE_BOOST = float(os.getenv("IOC_MATCH_SCORE_BOOST", "0.15"))
 
 # ── Startup Self-Test ───────────────────────────────────────────────────────
 

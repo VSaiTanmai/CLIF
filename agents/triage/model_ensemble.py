@@ -111,18 +111,44 @@ class ExtendedIsolationForest:
     Extended Isolation Forest — trained on normal-only data.
     Scores represent isolation-based anomaly measure in [0, 1].
     Higher = more anomalous.
+
+    CALIBRATED NORMALIZATION:
+      Uses training-time mean/std of raw path lengths for z-score
+      normalization, loaded from eif_calibration.npz. This ensures
+      the same event always gets the same score regardless of what
+      else is in the batch (fixing the batch-dependent scoring bug).
     """
 
-    def __init__(self, model_path: str, threshold_path: str):
+    def __init__(self, model_path: str, threshold_path: str,
+                 calibration_path: Optional[str] = None):
         if not Path(model_path).exists():
             raise FileNotFoundError(f"EIF model not found: {model_path}")
 
         self._model = joblib.load(model_path)
         self._threshold = float(np.load(threshold_path)) if Path(threshold_path).exists() else 0.4277
 
-        logger.info(
-            "EIF loaded: %s (threshold=%.4f)", model_path, self._threshold
-        )
+        # Load training-calibrated normalization parameters
+        self._cal_mean: Optional[float] = None
+        self._cal_std: Optional[float] = None
+        cal_path = calibration_path or str(Path(model_path).parent / "eif_calibration.npz")
+        if Path(cal_path).exists():
+            cal = np.load(cal_path)
+            self._cal_mean = float(cal["path_mean"])
+            self._cal_std = float(cal["path_std"])
+            logger.info(
+                "EIF loaded: %s (threshold=%.4f, cal_mean=%.4f, cal_std=%.4f)",
+                model_path, self._threshold, self._cal_mean, self._cal_std,
+            )
+        else:
+            logger.warning(
+                "EIF calibration file not found at %s — "
+                "falling back to per-batch normalization (LESS STABLE)",
+                cal_path,
+            )
+            logger.info(
+                "EIF loaded: %s (threshold=%.4f, NO calibration)",
+                model_path, self._threshold,
+            )
 
     def predict_batch(self, X: np.ndarray) -> np.ndarray:
         """
@@ -130,27 +156,33 @@ class ExtendedIsolationForest:
 
         Returns:
             scores: shape (N,) float64 in [0, 1].
-            Uses path-length normalization:
-              score = 1 / (1 + exp(-raw_score))  → sigmoid-normalized
+            Uses path-length normalization with FIXED training statistics:
+              z = (raw - training_mean) / training_std
+              score = 1 / (1 + exp(z))   (shorter path -> higher score)
         """
         if X.dtype != np.float64:
             X = X.astype(np.float64)
 
+        # Defensive: replace inf/NaN before computing paths
+        X = np.nan_to_num(X, nan=0.0, posinf=1e9, neginf=-1e9)
+
         raw_scores = self._model.compute_paths(X_in=X)
 
-        # Normalize to [0, 1] using sigmoid of z-scored path lengths
-        # Shorter path ⇒ more anomalous ⇒ higher score
-        if len(raw_scores) > 1:
-            mean_s = np.mean(raw_scores)
-            std_s = np.std(raw_scores)
-            if std_s > 1e-8:
-                z = (raw_scores - mean_s) / std_s
-            else:
-                z = raw_scores - mean_s
+        # Use FIXED training statistics for normalization (not per-batch)
+        if self._cal_mean is not None and self._cal_std is not None:
+            std_s = self._cal_std
+            mean_s = self._cal_mean
         else:
-            z = raw_scores
+            # Fallback: per-batch (legacy behavior, less stable)
+            mean_s = float(np.mean(raw_scores)) if len(raw_scores) > 1 else 0.0
+            std_s = float(np.std(raw_scores)) if len(raw_scores) > 1 else 1.0
 
-        # Negate because shorter path = more anomalous and compute sigmoid
+        if std_s > 1e-8:
+            z = (raw_scores - mean_s) / std_s
+        else:
+            z = raw_scores - mean_s
+
+        # Sigmoid: shorter path -> lower raw -> negative z -> higher score
         scores = 1.0 / (1.0 + np.exp(z))
 
         return np.clip(scores, 0.0, 1.0)
@@ -158,6 +190,10 @@ class ExtendedIsolationForest:
     @property
     def threshold(self) -> float:
         return self._threshold
+
+    @property
+    def is_calibrated(self) -> bool:
+        return self._cal_mean is not None and self._cal_std is not None
 
 
 class AdaptiveRandomForest:
@@ -183,6 +219,7 @@ class AdaptiveRandomForest:
         self._feature_cols = feature_cols
         self._ready = False
         self._rows_replayed = 0
+        self._samples_learned = 0
 
         # Create a fresh ARF with the EXACT same hyperparameters as training
         self._model = ARFClassifier(
@@ -352,6 +389,19 @@ class AdaptiveRandomForest:
     def learn_one(self, x_dict: Dict[str, float], y: int) -> None:
         """Online learning — called on each scored event for continuous adaptation."""
         self._model.learn_one(x_dict, y)
+        self._samples_learned += 1
+
+    @property
+    def confidence(self) -> float:
+        """
+        ARF confidence level (0.0-1.0) based on how many samples it has learned.
+        Ramps up from 0 to 1.0 over ARF_CONFIDENCE_RAMP_SAMPLES events.
+        Used by ScoreFusion for dynamic weighting — avoids dead-weight
+        during cold start when ARF returns near-constant scores.
+        """
+        total = self._rows_replayed + self._samples_learned
+        ramp = config.ARF_CONFIDENCE_RAMP_SAMPLES
+        return min(1.0, total / ramp) if ramp > 0 else 1.0
 
     def predict_batch(
         self, X: np.ndarray, feature_names: List[str]
@@ -461,7 +511,9 @@ class ModelEnsemble:
 
         # ─── Load EIF ──────────────────────────────────────────────────
         self._eif = ExtendedIsolationForest(
-            config.MODEL_EIF_PATH, config.MODEL_EIF_THRESHOLD_PATH
+            config.MODEL_EIF_PATH,
+            config.MODEL_EIF_THRESHOLD_PATH,
+            calibration_path=config.MODEL_EIF_CALIBRATION_PATH,
         )
 
         # ─── ARF warm restart (NOT pickle.load) ───────────────────────
@@ -492,18 +544,25 @@ class ModelEnsemble:
 
         Returns:
             Dict with keys 'lgbm', 'eif', 'arf', each shape (N,) float64.
+            Also includes 'arf_confidence' (0.0-1.0) indicating ARF reliability.
         """
         if not self._loaded:
             raise RuntimeError("Models not loaded. Call load() first.")
 
-        lgbm_scores = self._lgbm.predict_batch(X)
-        eif_scores = self._eif.predict_batch(X)
-        arf_scores = self._arf.predict_batch(X, self._feature_cols)
+        # Defensive: sanitize input — replace inf/NaN before inference
+        X_clean = np.nan_to_num(X, nan=0.0, posinf=1e9, neginf=-1e9)
+        if X_clean.dtype != np.float32:
+            X_clean = X_clean.astype(np.float32)
+
+        lgbm_scores = self._lgbm.predict_batch(X_clean)
+        eif_scores = self._eif.predict_batch(X_clean)
+        arf_scores = self._arf.predict_batch(X_clean, self._feature_cols)
 
         return {
             "lgbm": lgbm_scores,
             "eif": eif_scores,
             "arf": arf_scores,
+            "arf_confidence": self._arf.confidence,
         }
 
     @property
@@ -532,8 +591,11 @@ class ModelEnsemble:
             "lgbm_loaded": self._lgbm is not None,
             "eif_loaded": self._eif is not None,
             "eif_threshold": self._eif.threshold if self._eif else None,
+            "eif_calibrated": self._eif.is_calibrated if self._eif else False,
             "arf_loaded": self._arf is not None,
             "arf_ready": self._arf.is_ready if self._arf else False,
             "arf_rows_replayed": self._arf.rows_replayed if self._arf else 0,
+            "arf_confidence": self._arf.confidence if self._arf else 0.0,
+            "arf_samples_learned": self._arf._samples_learned if self._arf else 0,
             "arf_warm_restart": config.ARF_WARM_RESTART,
         }

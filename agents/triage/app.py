@@ -495,16 +495,36 @@ class TriageProcessor:
         """
         Write scored events to arf_replay_buffer for warm restart data.
         Also feed each event through ARF.learn_one() for online adaptation.
+
+        LABEL STRATEGY (fixes label leakage):
+          Instead of using the combined action (which includes ARF's own score),
+          we use only LightGBM's score as a pseudo-label. This prevents the ARF
+          from learning from its own predictions creating a feedback loop.
+          - LightGBM score > ARF_PSEUDO_LABEL_HIGH → label = 1 (malicious)
+          - LightGBM score < ARF_PSEUDO_LABEL_LOW  → label = 0 (normal)
+          - Otherwise → skip learning (ambiguous zone, don't poison ARF)
         """
         try:
             from datetime import datetime, timezone
 
             rows = []
             arf = self._ensemble.arf
+            use_lgbm_pseudo = config.ARF_LABEL_SOURCE == "lgbm_pseudo"
 
             for result, feat in zip(results, features_list):
-                # Label: escalate → 1 (anomalous), everything else → 0
-                label = 1 if result.action == "escalate" else 0
+                # Determine label for ARF learning
+                if use_lgbm_pseudo:
+                    # Use only LightGBM score as pseudo-label (no label leakage)
+                    lgbm_s = result.lgbm_score
+                    if lgbm_s >= config.ARF_PSEUDO_LABEL_HIGH:
+                        label = 1
+                    elif lgbm_s <= config.ARF_PSEUDO_LABEL_LOW:
+                        label = 0
+                    else:
+                        label = -1  # ambiguous — skip ARF learning
+                else:
+                    # Legacy: use combined action (has label leakage)
+                    label = 1 if result.action == "escalate" else 0
 
                 # Parse timestamp
                 ts_str = result.timestamp
@@ -524,11 +544,13 @@ class TriageProcessor:
                     val = float(feat.get(name, 0.0))
                     row.append(val)
                     feature_vals[name] = val
-                row.append(label)
+                row.append(max(0, label))  # store 0 for ambiguous in replay buffer
                 rows.append(row)
 
                 # Online ARF learning (non-blocking, fast per-event)
-                if arf is not None:
+                # Skip learning for ambiguous cases (label == -1) to avoid
+                # poisoning ARF with uncertain pseudo-labels
+                if arf is not None and label >= 0:
                     arf.learn_one(feature_vals, label)
 
             # Batch INSERT into ClickHouse

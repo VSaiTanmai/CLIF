@@ -523,11 +523,8 @@ def main():
                           f"{total_escalate} escalate = {total_monitor + total_escalate} total")
                 else:
                     print(f"  [WARN] No events reached monitor/escalate threshold "
-                          f"(0.70/0.90)")
-                    print(f"         This is expected with ARF cold-start (constant "
-                          f"~0.074)")
-                    print(f"         Max achievable combined = 0.5*lgbm + 0.3*eif "
-                          f"+ 0.015 = 0.815")
+                          f"(0.45/0.78)")
+                    print(f"         Calibrated from training data score distributions")
                     # Still count as pass if scores are clearly above normal
                     if max_attack_score > 0.4:
                         tests_passed += 1
@@ -580,7 +577,9 @@ def main():
                 print(f"  - LightGBM (50% weight): Trained classifier, primary signal")
                 print(f"  - EIF (30% weight): Isolation Forest anomaly detector")
                 print(f"  - ARF (20% weight): Online learner, cold-started at ~0.074")
-                print(f"  - Thresholds: monitor >= 0.70, escalate >= 0.90")
+                print(f"  - Thresholds: monitor >= 0.45, escalate >= 0.78 (calibrated)")
+                print(f"  - Dynamic ARF weighting: cold-start weight → 0%, ramps to 20%")
+                print(f"  - Post-model adjusters: template rarity + IOC score boost")
                 print(f"  - Asset multiplier: 1.0x (no IOC entries in test)")
                 if total_monitor + total_escalate == 0:
                     print(f"  - NOTE: No monitor/escalate because maximum achievable")

@@ -294,6 +294,11 @@ class FeatureExtractor:
             src_bytes = float(len(str(msg))) if msg else 0.0
             dst_bytes = 0.0
 
+        # Clamp to prevent inf/extreme values from poisoning model scores
+        # (training data had inf in src_bytes from CICIDS2017)
+        src_bytes = min(max(src_bytes, 0.0), 1e9)
+        dst_bytes = min(max(dst_bytes, 0.0), 1e9)
+
         # ── Feature 7: Event Frequency ──────────────────────────────────
         duration_raw = event.get("duration_ms", event.get("duration", 0))
         duration_sec = self._safe_float(duration_raw) / 1000.0 if is_network else 0.0
@@ -433,10 +438,13 @@ class FeatureExtractor:
 
     def batch_to_numpy(self, features_list: List[Dict[str, Any]]) -> np.ndarray:
         """Convert a list of feature dicts to a 2D numpy array."""
-        return np.array(
+        arr = np.array(
             [[f[name] for name in FEATURE_NAMES] for f in features_list],
             dtype=np.float32,
         )
+        # Defensive: replace inf/NaN that may come from raw event data
+        # (e.g. CICIDS2017 has inf in src_bytes). This prevents model crashes.
+        return np.nan_to_num(arr, nan=0.0, posinf=1e9, neginf=-1e9)
 
     # ── Private helpers ──────────────────────────────────────────────────
 

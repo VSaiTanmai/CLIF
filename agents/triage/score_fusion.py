@@ -377,8 +377,18 @@ class ScoreFusion:
         """
         Fuse scores and route a batch of events.
 
+        Dynamic weighting:
+          ARF weight is scaled by arf_confidence (0→1 ramp). Remaining
+          weight is redistributed proportionally to LightGBM and EIF.
+          This prevents the cold-start ARF from adding dead weight.
+
+        Post-model adjusters (compensate for dead training features):
+          - Template rarity: rare templates (< threshold) boost the score
+          - IOC match: matching IOC boosts the combined score directly
+
         Args:
             model_scores: Dict with 'lgbm', 'eif', 'arf' arrays (N,)
+                          and 'arf_confidence' float.
             features_list: List of feature dicts from extractor (N items)
             events: Original event dicts (N items)
 
@@ -389,9 +399,21 @@ class ScoreFusion:
         eif = model_scores["eif"]
         arf = model_scores["arf"]
 
-        w_lgbm = self._weights.get("lgbm", 0.50)
-        w_eif = self._weights.get("eif", 0.30)
-        w_arf = self._weights.get("arf", 0.20)
+        # ── Dynamic ARF weighting based on confidence ──────────────────
+        arf_conf = float(model_scores.get("arf_confidence", 1.0))
+        w_lgbm_base = self._weights.get("lgbm", 0.50)
+        w_eif_base = self._weights.get("eif", 0.30)
+        w_arf_base = self._weights.get("arf", 0.20)
+
+        # Scale ARF weight by confidence; redistribute remainder to LGBM+EIF
+        w_arf = w_arf_base * arf_conf
+        redistributed = w_arf_base - w_arf  # weight to redistribute
+        lgbm_eif_total = w_lgbm_base + w_eif_base
+        if lgbm_eif_total > 0:
+            w_lgbm = w_lgbm_base + redistributed * (w_lgbm_base / lgbm_eif_total)
+            w_eif = w_eif_base + redistributed * (w_eif_base / lgbm_eif_total)
+        else:
+            w_lgbm, w_eif = w_lgbm_base, w_eif_base
 
         # Vectorized fusion
         combined = lgbm * w_lgbm + eif * w_eif + arf * w_arf
@@ -456,8 +478,24 @@ class ScoreFusion:
             if ioc_match:
                 asset_multiplier = max(asset_multiplier, 1.5)
 
+            # ── Post-model adjusters (compensate for dead training features) ──
+            score_boost = 0.0
+
+            # Template rarity: models trained with constant 0.5, so they
+            # can't use this signal. Rare templates boost the score.
+            tmpl_rarity = float(feat.get("template_rarity", 0.5))
+            if tmpl_rarity < config.TEMPLATE_RARITY_RARE_THRESHOLD:
+                # Linearly scale boost: rarity 0 → full boost, threshold → 0
+                rarity_factor = 1.0 - (tmpl_rarity / config.TEMPLATE_RARITY_RARE_THRESHOLD)
+                score_boost += config.TEMPLATE_RARITY_BOOST_MAX * rarity_factor
+
+            # IOC match: models trained with constant 0, so IOC info is only
+            # usable via the multiplier above AND this direct score boost.
+            if ioc_match:
+                score_boost += config.IOC_MATCH_SCORE_BOOST
+
             # ── Adjusted score ──────────────────────────────────────────
-            adjusted = min(1.0, float(combined[i]) * asset_multiplier)
+            adjusted = min(1.0, (float(combined[i]) + score_boost) * asset_multiplier)
 
             # ── Per-source thresholds ───────────────────────────────────
             if self._source_thresholds:
@@ -566,4 +604,10 @@ class ScoreFusion:
                 "anomalous": config.DEFAULT_ANOMALOUS_THRESHOLD,
             },
             "disagreement_threshold": config.DISAGREEMENT_THRESHOLD,
+            "post_model_adjusters": {
+                "template_rarity_rare_threshold": config.TEMPLATE_RARITY_RARE_THRESHOLD,
+                "template_rarity_boost_max": config.TEMPLATE_RARITY_BOOST_MAX,
+                "ioc_match_score_boost": config.IOC_MATCH_SCORE_BOOST,
+            },
+            "arf_confidence_ramp_samples": config.ARF_CONFIDENCE_RAMP_SAMPLES,
         }
