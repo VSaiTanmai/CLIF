@@ -142,18 +142,22 @@ def load_cicids2017(zf):
 
     fwd_pkts = _safe_col(df, "Total Fwd Packets", 1).clip(lower=1)
 
+    # NO LEAKAGE: network flows arrive with no inherent severity
+    # Production feature_extractor maps from event 'level' field which is absent for flows
+    severity = np.clip(np.random.normal(1.0, 0.5, n), 0, 4).astype(float)
+
     return _make_frame(
         n,
         hour_of_day       = np.random.randint(0, 24, n).astype(float),
         day_of_week       = np.random.randint(0, 7, n).astype(float),
-        severity_numeric  = np.where(is_attack, 3.0, 1.0),
+        severity_numeric  = severity,
         source_type_numeric = np.full(n, 9.0),
         src_bytes         = _safe_col(df, "Total Length of Fwd Packets").clip(0, 1e9).values,
         dst_bytes         = _safe_col(df, "Total Length of Bwd Packets").clip(0, 1e9).values,
         event_freq_1m     = _safe_col(df, "Flow Packets/s").clip(0, 1e5).values,
         protocol          = np.full(n, 6.0),
         dst_port          = _safe_col(df, "Destination Port").clip(0, 65535).values,
-        template_rarity   = np.full(n, 0.5),
+        template_rarity   = np.clip(0.5 + np.random.normal(0, 0.1, n), 0, 1),
         threat_intel_flag = np.zeros(n),
         duration          = _safe_col(df, "Flow Duration").clip(0, 1e12).values,
         same_srv_rate     = (_safe_col(df, "Subflow Fwd Packets") / fwd_pkts).clip(0, 1).values,
@@ -182,11 +186,14 @@ def load_nsl_kdd(zf):
     attack_type = df["attack_type"].astype(str)
     attack_type[labels == 0] = "normal"
 
+    # NO LEAKAGE: IDS connection records have no inherent severity
+    severity = np.clip(np.random.normal(1.0, 0.5, n), 0, 4).astype(float)
+
     return _make_frame(
         n,
         hour_of_day       = np.random.randint(0, 24, n).astype(float),
         day_of_week       = np.random.randint(0, 7, n).astype(float),
-        severity_numeric  = np.where(labels == 1, 3.0, 1.0),
+        severity_numeric  = severity,
         source_type_numeric = np.full(n, 10.0),
         src_bytes         = _safe_col(df, "src_bytes").clip(0, 1e9).values,
         dst_bytes         = _safe_col(df, "dst_bytes").clip(0, 1e9).values,
@@ -233,11 +240,14 @@ def load_unsw_nb15(zf):
 
     ct_srv_src = _safe_col(df, "ct_srv_src").clip(lower=1)
 
+    # NO LEAKAGE: firewall/flow records have no inherent severity
+    severity = np.clip(np.random.normal(1.0, 0.5, n), 0, 4).astype(float)
+
     return _make_frame(
         n,
         hour_of_day       = np.random.randint(0, 24, n).astype(float),
         day_of_week       = np.random.randint(0, 7, n).astype(float),
-        severity_numeric  = np.where(labels == 1, 3.0, 1.0),
+        severity_numeric  = severity,
         source_type_numeric = np.full(n, 3.0),
         src_bytes         = _safe_col(df, "sbytes").clip(0, 1e9).values,
         dst_bytes         = _safe_col(df, "dbytes").clip(0, 1e9).values,
@@ -289,18 +299,21 @@ def _load_netflow_format(df, source_dataset):
             hour.loc[valid_ts] = dt[valid_dt].dt.hour.astype(float).values[:valid_ts.sum()]
             dow.loc[valid_ts]  = dt[valid_dt].dt.dayofweek.astype(float).values[:valid_ts.sum()]
 
+    # NO LEAKAGE: NetFlow records have no inherent severity
+    severity = np.clip(np.random.normal(1.0, 0.5, n), 0, 4).astype(float)
+
     return _make_frame(
         n,
         hour_of_day       = hour.values,
         day_of_week       = dow.values,
-        severity_numeric  = np.where(labels == 1, 3.0, 1.0),
+        severity_numeric  = severity,
         source_type_numeric = np.full(n, 9.0),
         src_bytes         = _safe_col(df, "IN_BYTES").clip(0, 1e9).values,
         dst_bytes         = _safe_col(df, "OUT_BYTES").clip(0, 1e9).values,
         event_freq_1m     = (_safe_col(df, "IN_PKTS") + _safe_col(df, "OUT_PKTS")).values,
         protocol          = _safe_col(df, "PROTOCOL").values,
         dst_port          = _safe_col(df, "L4_DST_PORT").clip(0, 65535).values,
-        template_rarity   = np.full(n, 0.5),
+        template_rarity   = np.clip(0.5 + np.random.normal(0, 0.1, n), 0, 1),
         threat_intel_flag = np.zeros(n),
         duration          = _safe_col(df, "FLOW_DURATION_MILLISECONDS").clip(0, 1e12).values,
         same_srv_rate     = np.zeros(n),
@@ -360,14 +373,18 @@ def load_csic2010(zf):
     content_fb = content_str.str.len().astype(float)
     src_bytes = np.where(content_len > 0, content_len, content_fb)
 
+    # NO LEAKAGE: template_rarity from URL length for ALL rows (not label-dependent)
     url_len = df.get("URL", pd.Series("", index=df.index)).astype(str).str.len().astype(float)
-    template_rarity = np.where(is_attack, np.clip(url_len / 200.0, 0.0, 1.0), 0.5)
+    template_rarity = np.clip(url_len / 200.0, 0.0, 1.0)  # same formula for attacks AND normals
+
+    # NO LEAKAGE: HTTP requests arrive with no severity level
+    severity = np.zeros(n)  # HTTP requests have no inherent severity
 
     return _make_frame(
         n,
         hour_of_day       = np.random.randint(8, 20, n).astype(float),
         day_of_week       = np.random.randint(0, 5, n).astype(float),
-        severity_numeric  = np.where(is_attack, 3.0, 1.0),
+        severity_numeric  = severity,
         source_type_numeric = np.full(n, 8.0),
         src_bytes         = np.clip(src_bytes, 0, 1e9),
         dst_bytes         = np.zeros(n),
@@ -399,13 +416,13 @@ def load_evtx(zf):
     n_attack = len(df)
     log.info(f"  {n_attack} attack rows")
 
-    sev_map = {
-        "Lateral Movement": 4.0, "Execution": 4.0,
-        "Privilege Escalation": 4.0, "Credential Access": 4.0,
-        "Command and Control": 3.0, "Defense Evasion": 3.0,
-        "Persistence": 3.0, "Discovery": 2.0,
-    }
-    severity = df["EVTX_Tactic"].map(sev_map).fillna(3.0).values
+    # NO LEAKAGE: Windows event severity from EventID-based level, NOT tactic
+    # Real events have level: Information(0), Warning(2), Error(3), Critical(4)
+    # Most security events (4624, 4625, 4688, etc.) arrive as Information(0)
+    event_id = _safe_col(df, "EventID", 0).astype(int)
+    # Map real Windows event levels: most security events are Information
+    warning_eids = {4625, 4771, 4776}  # logon failures
+    severity = np.where(event_id.isin(warning_eids), 2.0, 0.0)  # mostly Information level
 
     dst_port = _safe_col(df, "DestPort", 0)
     if "DestinationPort" in df.columns:
@@ -414,7 +431,9 @@ def load_evtx(zf):
 
     event_id = _safe_col(df, "EventID", 0).astype(int)
     common_eids = {4624, 4625, 4634, 4648, 4672, 4688, 4689, 7045, 1}
-    tr_attack = np.where(event_id.isin(common_eids), 0.4, 0.1)
+    # NO LEAKAGE: EventID-based rarity is legitimate (common events → higher rarity value)
+    # Use same scale for both attack and normal frames
+    tr_attack = np.clip(0.4 + np.random.normal(0, 0.1, n_attack), 0, 1)
 
     attack_type = ("evtx_" + df["EVTX_Tactic"].str.lower().str.replace(" ", "_")).values
 
@@ -450,14 +469,14 @@ def load_evtx(zf):
         n_norm,
         hour_of_day       = np.random.choice([8,9,10,11,12,13,14,15,16,17], n_norm).astype(float),
         day_of_week       = np.random.randint(0, 5, n_norm).astype(float),
-        severity_numeric  = np.ones(n_norm),
+        severity_numeric  = np.zeros(n_norm),  # Information level (matches attack events)
         source_type_numeric = np.full(n_norm, 2.0),
         src_bytes         = np.zeros(n_norm),
         dst_bytes         = np.zeros(n_norm),
         event_freq_1m     = np.random.randint(5, 60, n_norm).astype(float),
         protocol          = np.zeros(n_norm),
         dst_port          = np.zeros(n_norm),
-        template_rarity   = np.clip(0.5 + np.random.normal(0, 0.05, n_norm), 0, 1),
+        template_rarity   = np.clip(0.4 + np.random.normal(0, 0.1, n_norm), 0, 1),  # same as attacks
         threat_intel_flag = np.zeros(n_norm),
         duration          = np.zeros(n_norm),
         same_srv_rate     = np.zeros(n_norm),
@@ -497,11 +516,15 @@ def load_loghub_linux(zf):
         is_attack = is_attack | content.str.contains(pat, na=False, regex=False)
     labels = is_attack.astype(int)
 
+    # HONEST severity: derived from syslog keywords in the content (legitimate feature)
+    # BUT add noise so it's not a perfect label proxy
     has_failure = content.str.contains("failure|failed", na=False, regex=True)
     has_error = content.str.contains("error|refused", na=False, regex=True)
-    severity = np.where(has_failure, 3.0, np.where(has_error, 2.0, 1.0))
+    base_sev = np.where(has_failure, 2.5, np.where(has_error, 1.5, 0.5))
+    severity = np.clip(base_sev + np.random.normal(0, 0.5, n), 0, 4)  # add noise
 
-    template_rarity = np.where(is_attack, 0.3, 0.6)
+    # NO LEAKAGE: template_rarity not label-dependent — use content diversity
+    template_rarity = np.clip(0.5 + np.random.normal(0, 0.15, n), 0, 1)
 
     time_col = df.get("Time", pd.Series("", index=df.index)).astype(str)
     hour = time_col.str.extract(r"(\d+):", expand=False)
@@ -564,8 +587,14 @@ def load_loghub_apache(zf):
     is_error = is_error_level | is_error_content
     labels = is_error.astype(int)
 
-    severity = np.where(is_error_level, 3.0, np.where(level == "warn", 2.0, 1.0))
-    template_rarity = np.where(is_error, 0.2, 0.6)
+    # HONEST severity: from Apache log level (legitimate — this IS what production sees)
+    # But map to realistic scale with noise so it's informative, not deterministic
+    sev_map = {"emerg": 4.0, "alert": 3.5, "crit": 3.0, "error": 2.5, "warn": 1.5, "notice": 0.5, "info": 0.0}
+    base_sev = level.map(sev_map).fillna(0.5).values.astype(float)
+    severity = np.clip(base_sev + np.random.normal(0, 0.3, n), 0, 4)
+
+    # NO LEAKAGE: template_rarity not label-dependent
+    template_rarity = np.clip(0.5 + np.random.normal(0, 0.15, n), 0, 1)
 
     return _make_frame(
         n,
@@ -754,11 +783,23 @@ def train_lightgbm(df):
     y = df["label"].values.astype(int)
     indices = df.index.values
 
+    # Stratify by (dataset + label) so EACH dataset is proportionally
+    # represented in both train and test — not just label balance
+    strat_key = df["source_dataset"].astype(str) + "_" + df["label"].astype(str)
     X_train, X_val, y_train, y_val, idx_train, idx_val = train_test_split(
-        X, y, indices, test_size=0.2, random_state=42, stratify=y,
+        X, y, indices, test_size=0.2, random_state=42, stratify=strat_key,
     )
     log.info(f"Train: {len(X_train):,} ({(y_train==1).sum():,} pos, {(y_train==0).sum():,} neg)")
     log.info(f"Val:   {len(X_val):,} ({(y_val==1).sum():,} pos, {(y_val==0).sum():,} neg)")
+
+    # Log per-dataset split to verify proportional representation
+    val_ds = df.loc[idx_val, "source_dataset"].values
+    train_ds = df.loc[idx_train, "source_dataset"].values
+    log.info("Per-dataset split verification:")
+    for ds in sorted(set(val_ds)):
+        n_train_ds = (train_ds == ds).sum()
+        n_val_ds = (val_ds == ds).sum()
+        log.info(f"  {ds:20s}: train={n_train_ds:5d}, val={n_val_ds:5d}")
 
     scale_pos = (y_train == 0).sum() / max(1, (y_train == 1).sum())
     log.info(f"scale_pos_weight: {scale_pos:.4f}")
@@ -770,15 +811,16 @@ def train_lightgbm(df):
         "objective": "binary",
         "metric": ["binary_logloss", "auc"],
         "boosting_type": "gbdt",
-        "num_leaves": 63,
-        "max_depth": 8,
+        "num_leaves": 31,          # reduced from 63 to prevent memorization
+        "max_depth": 6,            # reduced from 8
         "learning_rate": 0.05,
-        "min_child_samples": 20,
-        "colsample_bytree": 0.8,
-        "subsample": 0.8,
-        "subsample_freq": 5,
-        "reg_alpha": 0.1,
-        "reg_lambda": 1.0,
+        "min_child_samples": 50,   # increased from 20 for better generalization
+        "colsample_bytree": 0.7,   # reduced from 0.8
+        "subsample": 0.7,          # reduced from 0.8
+        "subsample_freq": 1,       # every iteration (was 5)
+        "reg_alpha": 0.5,          # increased from 0.1
+        "reg_lambda": 5.0,         # increased from 1.0
+        "min_gain_to_split": 0.1,  # NEW: prevent trivial splits
         "scale_pos_weight": scale_pos,
         "verbose": -1,
         "seed": 42,

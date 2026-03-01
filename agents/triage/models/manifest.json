@@ -3,24 +3,21 @@
     "active": "v2.0.0",
     "file": "lgbm_v2.0.0.onnx",
     "metrics": {
-      "accuracy": 0.9997,
-      "precision": 0.9993,
-      "recall": 1.0,
-      "f1": 0.9997
+      "accuracy": 0.9597,
+      "precision": 0.9532,
+      "recall": 0.9655,
+      "f1": 0.9593
     }
   },
   "eif": {
     "active": "v2.0.0",
     "file": "eif_v2.0.0.pkl",
     "calibration": {
-      "mean": 0.391091,
-      "std": 0.055962
+      "mean": 0.396622,
+      "std": 0.057149
     },
-    "threshold": 0.7506,
-    "discrimination_delta": -0.196,
-    "score_flip": true,
-    "discrimination_delta_raw": -0.196,
-    "discrimination_delta_corrected": 0.196
+    "threshold": 0.7458,
+    "discrimination_delta": -0.0682
   },
   "arf": {
     "active": "v2.0.0",
@@ -28,8 +25,8 @@
     "stream_csv": "features_arf_stream_features.csv"
   },
   "thresholds": {
-    "suspicious": 0.5,
-    "anomalous": 0.55
+    "suspicious": 0.4,
+    "anomalous": 0.7
   },
   "datasets": [
     "cicids2017",
@@ -63,10 +60,5 @@
     "srv_count",
     "dst_host_count",
     "dst_host_srv_count"
-  ],
-  "weights": {
-    "lgbm": 0.6,
-    "eif": 0.15,
-    "arf": 0.25
-  }
+  ]
 }

@@ -67,15 +67,17 @@ for pair in _raw_weights.split(","):
 
 # ── Thresholds ──────────────────────────────────────────────────────────────
 
-# v2 thresholds calibrated from 9-dataset combined training data (131K rows).
+# v2.1 thresholds — LABEL-LEAKAGE FIXED, retrained with honest features.
+# 131K rows, 9 datasets, F1=0.9593, AUC=0.9936, 997 iterations.
 # Weights: LGBM=0.60, EIF=0.15(flipped), ARF=0.25.
-# Cold-start (ARF conf=0): Normal~0.41, Mal~0.62
-# Full ensemble: Normal~0.38, Mal~0.69
+# Cold-start (ARF conf=0): Normal~0.15, Mal~0.86
+# suspicious=0.40 → detect=97.5%, FPR=5.0%
+# anomalous=0.70  → detect~85%, FPR<1%  (lowered from 0.89 for usability)
 DEFAULT_SUSPICIOUS_THRESHOLD = float(
-    os.getenv("DEFAULT_SUSPICIOUS_THRESHOLD", "0.50")
+    os.getenv("DEFAULT_SUSPICIOUS_THRESHOLD", "0.40")
 )
 DEFAULT_ANOMALOUS_THRESHOLD = float(
-    os.getenv("DEFAULT_ANOMALOUS_THRESHOLD", "0.55")
+    os.getenv("DEFAULT_ANOMALOUS_THRESHOLD", "0.70")
 )
 DISAGREEMENT_THRESHOLD = float(os.getenv("DISAGREEMENT_THRESHOLD", "0.30"))
 
