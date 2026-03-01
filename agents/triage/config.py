@@ -43,21 +43,23 @@ DRAIN3_CONFIG_PATH = os.getenv("DRAIN3_CONFIG_PATH", "/app/drain3.ini")
 # ── Models ──────────────────────────────────────────────────────────────────
 
 MODEL_DIR = os.getenv("MODEL_DIR", "/models")
-MODEL_LGBM_PATH = os.getenv("MODEL_LGBM_PATH", "/models/lgbm_v1.0.0.onnx")
-MODEL_EIF_PATH = os.getenv("MODEL_EIF_PATH", "/models/eif_v1.0.0.pkl")
+MODEL_LGBM_PATH = os.getenv("MODEL_LGBM_PATH", "/models/lgbm_v2.0.0.onnx")
+MODEL_EIF_PATH = os.getenv("MODEL_EIF_PATH", "/models/eif_v2.0.0.pkl")
 MODEL_EIF_THRESHOLD_PATH = os.getenv(
     "MODEL_EIF_THRESHOLD_PATH", "/models/eif_threshold.npy"
 )
 MODEL_EIF_CALIBRATION_PATH = os.getenv(
     "MODEL_EIF_CALIBRATION_PATH", "/models/eif_calibration.npz"
 )
-MODEL_ARF_CHECKPOINT = os.getenv("MODEL_ARF_CHECKPOINT", "/models/arf_v1.0.0.pkl")
+MODEL_ARF_CHECKPOINT = os.getenv("MODEL_ARF_CHECKPOINT", "/models/arf_v2.0.0.pkl")
 FEATURE_COLS_PATH = os.getenv("FEATURE_COLS_PATH", "/models/feature_cols.pkl")
 MANIFEST_PATH = os.getenv("MANIFEST_PATH", "/models/manifest.json")
 
 # ── Score Weights ───────────────────────────────────────────────────────────
 
-_raw_weights = os.getenv("SCORE_WEIGHTS", "lgbm=0.50,eif=0.30,arf=0.20")
+# v2 weights: LightGBM dominates, EIF reduced (inverted discrimination
+# corrected via score_flip), ARF increased (now functional with delta=0.62).
+_raw_weights = os.getenv("SCORE_WEIGHTS", "lgbm=0.60,eif=0.15,arf=0.25")
 SCORE_WEIGHTS = {}
 for pair in _raw_weights.split(","):
     k, v = pair.split("=")
@@ -65,14 +67,15 @@ for pair in _raw_weights.split(","):
 
 # ── Thresholds ──────────────────────────────────────────────────────────────
 
-# Thresholds calibrated from training data score distributions:
-# Normal p95 combined ≈ 0.43, Malicious p50 combined ≈ 0.82
-# Previous 0.70/0.90 was unreachable without IOC multiplier.
+# v2 thresholds calibrated from 9-dataset combined training data (131K rows).
+# Weights: LGBM=0.60, EIF=0.15(flipped), ARF=0.25.
+# Cold-start (ARF conf=0): Normal~0.41, Mal~0.62
+# Full ensemble: Normal~0.38, Mal~0.69
 DEFAULT_SUSPICIOUS_THRESHOLD = float(
-    os.getenv("DEFAULT_SUSPICIOUS_THRESHOLD", "0.45")
+    os.getenv("DEFAULT_SUSPICIOUS_THRESHOLD", "0.50")
 )
 DEFAULT_ANOMALOUS_THRESHOLD = float(
-    os.getenv("DEFAULT_ANOMALOUS_THRESHOLD", "0.78")
+    os.getenv("DEFAULT_ANOMALOUS_THRESHOLD", "0.55")
 )
 DISAGREEMENT_THRESHOLD = float(os.getenv("DISAGREEMENT_THRESHOLD", "0.30"))
 
@@ -126,9 +129,10 @@ ARF_PSEUDO_LABEL_HIGH = float(os.getenv("ARF_PSEUDO_LABEL_HIGH", "0.80"))
 ARF_PSEUDO_LABEL_LOW = float(os.getenv("ARF_PSEUDO_LABEL_LOW", "0.20"))
 
 # ── Template Rarity & IOC Post-Model Boost ──────────────────────────────────
-# template_rarity and threat_intel_flag were CONSTANT in training data (0.5 and 0
-# respectively), so the models never learned from them. Instead of model features,
-# they are applied as post-model score adjusters in the fusion layer.
+# v2 training data now includes VARYING template_rarity for EVTX, CSIC, and
+# Loghub datasets (LightGBM feature importance: #2 at 9688 gain).
+# threat_intel_flag remains 0 in training, so IOC boost is still applied
+# post-model. Template rarity boost is kept for additional runtime signal.
 # Rare templates (< RARE_THRESHOLD) and IOC matches boost the score by up to
 # BOOST_MAX_PCT percent.
 TEMPLATE_RARITY_RARE_THRESHOLD = float(

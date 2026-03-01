@@ -130,14 +130,19 @@ class ExtendedIsolationForest:
         # Load training-calibrated normalization parameters
         self._cal_mean: Optional[float] = None
         self._cal_std: Optional[float] = None
+        self._score_flip: bool = False
         cal_path = calibration_path or str(Path(model_path).parent / "eif_calibration.npz")
         if Path(cal_path).exists():
             cal = np.load(cal_path)
             self._cal_mean = float(cal["path_mean"])
             self._cal_std = float(cal["path_std"])
+            # score_flip: when EIF discrimination is inverted (normal > malicious),
+            # flip the sigmoid so higher scores still mean more anomalous.
+            if "score_flip" in cal:
+                self._score_flip = bool(int(cal["score_flip"]))
             logger.info(
-                "EIF loaded: %s (threshold=%.4f, cal_mean=%.4f, cal_std=%.4f)",
-                model_path, self._threshold, self._cal_mean, self._cal_std,
+                "EIF loaded: %s (threshold=%.4f, cal_mean=%.4f, cal_std=%.4f, flip=%s)",
+                model_path, self._threshold, self._cal_mean, self._cal_std, self._score_flip,
             )
         else:
             logger.warning(
@@ -184,6 +189,12 @@ class ExtendedIsolationForest:
 
         # Sigmoid: shorter path -> lower raw -> negative z -> higher score
         scores = 1.0 / (1.0 + np.exp(z))
+
+        # When EIF discrimination is inverted (multi-log heterogeneity causes
+        # normal data to score higher than malicious), flip the scores so
+        # "higher = more anomalous" invariant is maintained.
+        if self._score_flip:
+            scores = 1.0 - scores
 
         return np.clip(scores, 0.0, 1.0)
 

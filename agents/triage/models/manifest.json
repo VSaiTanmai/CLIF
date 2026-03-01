@@ -1,25 +1,72 @@
 {
   "lgbm": {
-    "active": "v1.0.0",
-    "candidate": null,
-    "candidate_pct": 0,
-    "file": "models/lgbm_v1.0.0.onnx"
+    "active": "v2.0.0",
+    "file": "lgbm_v2.0.0.onnx",
+    "metrics": {
+      "accuracy": 0.9997,
+      "precision": 0.9993,
+      "recall": 1.0,
+      "f1": 0.9997
+    }
   },
   "eif": {
-    "active": "v1.0.0",
-    "candidate": null,
-    "file": "models/eif_v1.0.0.pkl",
-    "threshold": "models/eif_threshold.npy"
+    "active": "v2.0.0",
+    "file": "eif_v2.0.0.pkl",
+    "calibration": {
+      "mean": 0.391091,
+      "std": 0.055962
+    },
+    "threshold": 0.7506,
+    "discrimination_delta": -0.196,
+    "score_flip": true,
+    "discrimination_delta_raw": -0.196,
+    "discrimination_delta_corrected": 0.196
   },
   "arf": {
-    "active": "v1.0.0",
-    "candidate": null,
-    "file": "models/arf_v1.0.0.pkl",
-    "warm_restart": true,
-    "warm_restart_script": "scripts/arf_warm_restart.py",
-    "replay_table": "arf_replay_buffer",
-    "note": "Pickle file kept as fallback reference only; production loads via warm restart from ClickHouse"
+    "active": "v2.0.0",
+    "file": "arf_v2.0.0.pkl",
+    "stream_csv": "features_arf_stream_features.csv"
   },
-  "feature_cols": "models/feature_cols.pkl",
-  "drain3_state": "drain3_state.bin"
+  "thresholds": {
+    "suspicious": 0.5,
+    "anomalous": 0.55
+  },
+  "datasets": [
+    "cicids2017",
+    "nsl_kdd",
+    "unsw_nb15",
+    "nf_unsw_nb15_v3",
+    "nf_ton_iot",
+    "csic_2010",
+    "evtx",
+    "loghub_linux",
+    "loghub_apache"
+  ],
+  "feature_cols": [
+    "hour_of_day",
+    "day_of_week",
+    "severity_numeric",
+    "source_type_numeric",
+    "src_bytes",
+    "dst_bytes",
+    "event_freq_1m",
+    "protocol",
+    "dst_port",
+    "template_rarity",
+    "threat_intel_flag",
+    "duration",
+    "same_srv_rate",
+    "diff_srv_rate",
+    "serror_rate",
+    "rerror_rate",
+    "count",
+    "srv_count",
+    "dst_host_count",
+    "dst_host_srv_count"
+  ],
+  "weights": {
+    "lgbm": 0.6,
+    "eif": 0.15,
+    "arf": 0.25
+  }
 }
