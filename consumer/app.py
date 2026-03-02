@@ -232,7 +232,7 @@ def _build_raw_log_row(msg: dict) -> list:
         _safe_str(msg.get("message")),               # message
         {str(k): str(v) for k, v in meta.items()},  # metadata
         _safe_str(meta.get("user_id")),              # user_id
-        _safe_str(meta.get("ip_address"), "0.0.0.0"),# ip_address
+        _safe_str(msg.get("ip_address", meta.get("ip_address", "0.0.0.0"))),  # ip_address
         _safe_str(meta.get("request_id")),           # request_id
         "",                                          # anchor_tx_id
         "",                                          # anchor_batch_hash
@@ -586,14 +586,14 @@ class ClickHouseWriter:
                     send_receive_timeout=120,
                     compression='lz4',  # LZ4 wire compression
                     settings={
-                        # async_insert RE-ENABLED — with wait=0, INSERT returns
-                        # immediately (no blocking). ClickHouse buffers and
-                        # flushes to parts asynchronously. This dramatically
-                        # reduces per-INSERT latency vs sync writes, letting
-                        # flush workers return fast → main loop resumes polling.
-                        # Short 200ms timeout keeps data visibility lag minimal.
+                        # async_insert with wait=1 — INSERT blocks until CH
+                        # has persisted the async buffer (≤100ms). This
+                        # guarantees data durability: if INSERT returns
+                        # success → data is on disk. Without wait=1, a CH
+                        # crash between INSERT-return and async-flush loses
+                        # data that we already committed offsets for.
                         "async_insert": 1,
-                        "wait_for_async_insert": 0,
+                        "wait_for_async_insert": 1,
                         "async_insert_busy_timeout_ms": 100,
                         "async_insert_max_data_size": 104857600,  # 100 MB
                         # Parallel INSERT processing within ClickHouse
@@ -900,6 +900,39 @@ def _flush_all_parallel(
     return all_ok
 
 
+def _drain_pending_and_commit(
+    pending_futures: list[tuple],
+    stats: StatsReporter,
+    consumer: Consumer,
+    flush_ok: bool,
+) -> None:
+    """Wait for ALL pending flush futures, then commit offsets if all OK.
+
+    This prevents the pipelined-commit race condition where offsets are
+    committed for batch N before batch N's ClickHouse INSERT is confirmed.
+    Without this drain, a failed INSERT after offset commit means those
+    events are never re-consumed on restart → permanent data loss.
+    """
+    drain_ok = True
+    total_drained = 0
+    for fut, table, count in pending_futures:
+        try:
+            flushed = fut.result(timeout=60)
+            total_drained += flushed
+        except Exception as exc:
+            log.error("Drain: flush %d rows → %s failed: %s", count, table, exc)
+            stats.record_error(count)
+            drain_ok = False
+    if total_drained > 0:
+        stats.record_flush(total_drained)
+    pending_futures.clear()
+
+    if flush_ok and drain_ok:
+        consumer.commit(asynchronous=True)
+    else:
+        log.warning("Skipping offset commit — flush had errors")
+
+
 def main() -> None:
     log.info(
         "Starting CLIF consumer  brokers=%s  group=%s  batch=%d  flush=%.1fs  "
@@ -975,10 +1008,7 @@ def main() -> None:
                 # No messages — check time-based flush
                 if time.monotonic() - last_flush >= FLUSH_INTERVAL and total_buffered > 0:
                     flush_ok = _flush_all_parallel(writer_pool, buffers, stats, flush_pool, pending_futures)
-                    if flush_ok:
-                        consumer.commit(asynchronous=True)
-                    else:
-                        log.warning("Skipping offset commit — previous flush had errors")
+                    _drain_pending_and_commit(pending_futures, stats, consumer, flush_ok)
                     total_buffered = 0
                     last_flush = time.monotonic()
                 continue
@@ -1048,10 +1078,7 @@ def main() -> None:
             # ── Size-based flush ──
             if total_buffered >= BATCH_SIZE:
                 flush_ok = _flush_all_parallel(writer_pool, buffers, stats, flush_pool, pending_futures)
-                if flush_ok:
-                    consumer.commit(asynchronous=True)
-                else:
-                    log.warning("Skipping offset commit — previous flush had errors")
+                _drain_pending_and_commit(pending_futures, stats, consumer, flush_ok)
                 total_buffered = 0
                 last_flush = time.monotonic()
                 continue
@@ -1059,10 +1086,7 @@ def main() -> None:
             # ── Time-based flush ──
             if time.monotonic() - last_flush >= FLUSH_INTERVAL:
                 flush_ok = _flush_all_parallel(writer_pool, buffers, stats, flush_pool, pending_futures)
-                if flush_ok:
-                    consumer.commit(asynchronous=True)
-                else:
-                    log.warning("Skipping offset commit — previous flush had errors")
+                _drain_pending_and_commit(pending_futures, stats, consumer, flush_ok)
                 total_buffered = 0
                 last_flush = time.monotonic()
 

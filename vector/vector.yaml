@@ -37,7 +37,7 @@ log_schema:
   timestamp_key: "timestamp"
 
 acknowledgements:
-  enabled: false
+  enabled: true
 
 # ── API / Health ─────────────────────────────────────────────────────────────
 
@@ -719,12 +719,23 @@ transforms:
         _lvl = if exists(.level) { to_string(.level) } else { "INFO" }
         if _lvl == "DEBUG" { abort }
         _src = if exists(.source) { to_string!(.source) } else { "vector" }
+
+        # Preserve parsed IP before obj rebuild (extracted in Section B)
+        _raw_ip = "0.0.0.0"
+        if exists(.ip_address) {
+          _raw_ip_s = to_string!(.ip_address)
+          if match(_raw_ip_s, r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$') {
+            _raw_ip = _raw_ip_s
+          }
+        }
+
         . = {
           "event_id": _eid,
           "clif_event_type": "raw",
           "timestamp": _ts,
           "level": _lvl,
           "source": _src,
+          "ip_address": _raw_ip,
           "message": _msg,
           "message_body": _msg_body,
           "source_type": _src_type,
