@@ -58,8 +58,8 @@
     <!-- ================================================================= -->
     <!-- Mark / Uncompressed Cache                                         -->
     <!-- ================================================================= -->
-    <mark_cache_size>5368709120</mark_cache_size>
-    <uncompressed_cache_size>8589934592</uncompressed_cache_size>
+    <mark_cache_size>268435456</mark_cache_size>
+    <uncompressed_cache_size>134217728</uncompressed_cache_size>
 
     <remote_servers>
         <clif_cluster>
