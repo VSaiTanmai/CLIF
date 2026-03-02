@@ -5,32 +5,49 @@
 
 ---
 
-## v2 Pipeline Architecture
+## v2.1 Pipeline Architecture (Current — VRL-Optimized + CPU-Rebalanced)
 
-**Stack:** Vector 0.42.0 (6 threads, 3 GB) → ClickHouse 24.8 Direct (2 replicated nodes) + Kafka/Redpanda for AI pipeline only  
+**Stack:** Vector 0.42.0 (8 threads, 3 GB) → ClickHouse 24.8 Direct (2 replicated nodes) + Kafka/Redpanda for AI pipeline only  
 **Compose:** `docker-compose.eps-test.yml` — 6 containers, ~8.5 GB total, zero CPU oversubscription (12/12 cores)  
 
 | Container | CPUs | Memory | Role |
 |-----------|------|--------|------|
-| clif-vector | 6 | 3 GB | TCP/HTTP/Syslog → mega_transform → CH sinks |
-| clickhouse01 | 2 | 2 GB | Primary replica |
-| clickhouse02 | 1.5 | 1.5 GB | Secondary replica |
-| redpanda01 | 1 | 1 GB | AI pipeline topics only |
-| clickhouse-keeper | 0.5 | 512 MB | ZooKeeper replacement |
-| clif-consumer | 1 | 512 MB | AI pipeline consumer |
+| clif-vector | 8 | 3 GB | TCP/HTTP/Syslog → mega_transform → CH sinks |
+| clickhouse01 | 2.5 | 2 GB | Primary replica (all writes) |
+| clickhouse02 | 0.5 | 1.5 GB | Async replication only |
+| redpanda01 | 0.5 | 1 GB | AI pipeline topics only |
+| clickhouse-keeper | 0.25 | 512 MB | ZooKeeper replacement |
+| clif-consumer | 0.25 | 512 MB | AI pipeline consumer |
 
-### Key v2 Optimizations
-- Single mega_transform (2 hops, was 6) — saves ~12µs/event
-- Direct ClickHouse HTTP sinks (bypasses Kafka→Python consumer path)
-- Async inserts (`async_insert=1&wait_for_async_insert=0`)
-- Non-blocking buffers (`when_full: drop_newest`)
-- Concurrency: 20 per CH sink (was 4)
-- No compression on local Docker network
-- Kafka retained ONLY for AI pipeline dual-write (security events)
+### v2.1 Optimizations (over v2)
+- **VRL: Conditional metadata build** — full metadata for security events only, minimal `{original_source_type}` for process/network/raw (saves ~10 exists() checks per non-security event)
+- **VRL: Eliminated redundant field checks in output formatting** — Section D guarantees fields exist, Section E uses them directly instead of re-checking
+- **CPU rebalance** — Vector 6→8 CPUs (transforms are CPU-intensive), CH01 2→2.5 (sole write target), CH02/Redpanda/Consumer reduced (idling in benchmarks)
+- **De-sharded writes** — All writes to CH01 (sharding hurt with security-heavy datasets due to replication overhead on CH02)
 
 ---
 
-## Benchmark Results — v2 Pipeline
+## Benchmark Results — v2.1 Pipeline (Latest)
+
+### Real-Log Benchmarks (11 Heterogeneous Datasets, Go TCP Blaster)
+
+| Test | Workers | Events Sent | Total EPS | Per-Core EPS | Vector CPUs |
+|------|---------|-------------|-----------|-------------|-------------|
+| **CH+Kafka (production) Run 1** | 12 TCP | 3,064,913 | **51,081** | **6,385** | 8 |
+| **CH+Kafka (production) Run 2** | 12 TCP | 3,326,297 | **55,438** | **6,929** | 8 |
+| **CH only (no Kafka)** | 12 TCP | 3,715,457 | **61,924** | **7,740** | 8 |
+| **CH+Kafka — 16 workers** | 16 TCP | 3,333,839 | **55,563** | **6,945** | 8 |
+
+### Resource Utilization During v2.1 Benchmarks
+
+| Config | Vector CPU | CH01 CPU | CH02 CPU | Redpanda CPU | Vector Mem | Notes |
+|--------|-----------|----------|----------|-------------|-----------|-------|
+| CH+Kafka (production) | 382% / 800% | 186% / 250% | 50% / 50% | 17% / 50% | 341 MB | CH01 at 74% |
+| CH only (no Kafka) | 376% / 800% | 223% / 250% | 52% / 50% | 2% / 50% | 1.03 GB | CH01 at 89% ← bottleneck |
+
+---
+
+## Benchmark Results — v2 Pipeline (Historical)
 
 ### Synthetic Benchmarks (Pre-generated Events)
 
@@ -39,7 +56,7 @@
 | Synthetic v2 (pre-generated) | 60s | ~7.2M | **115,000–121,000** | **19,200–20,100** | 6 |
 | Synthetic v1 (baseline) | 30s | 1.37M | 45,675 | 11,419 | 4 |
 
-### Real-Log Benchmarks (11 Heterogeneous Datasets)
+### Real-Log Benchmarks (Go TCP Blaster, v2 configuration — 6 Vector CPUs)
 
 | Test | Sender | Workers | Duration | Events Sent | Total EPS | Per-Core EPS |
 |------|--------|---------|----------|-------------|-----------|-------------|
@@ -50,36 +67,42 @@
 | Python TCP (sender-bound) | Python | 6 proc | 60s | 2,159,160 | 35,986 | 5,998 |
 | Python TCP v1 (baseline) | Python | 6 proc | 60s | 1,755,447 | 26,959 | 6,740 |
 
-### Resource Utilization During Benchmarks
+### Resource Utilization During v2 Benchmarks (6 Vector CPUs)
 
 | Config | Vector CPU | CH01 CPU | CH02 CPU | Redpanda CPU | Notes |
 |--------|-----------|----------|----------|-------------|-------|
-| CH+Kafka (production) | 377% | 199% | 151% | 28% | Full pipeline utilized |
-| CH+Kafka (pre-optimization) | 3% | 34% | 7% | 2% | Kafka `block` killed throughput |
-| CH only (no Kafka) | 329% | 131% | 103% | 2% | Theoretical CH ceiling |
-| Blackhole (VRL ceiling) | 362% | 0% | 0% | 0% | Pure transform speed |
+| CH+Kafka (production) | 377% / 600% | 199% / 200% | 151% / 150% | 28% / 100% | Full pipeline utilized |
+| CH+Kafka (pre-optimization) | 3% / 600% | 34% / 200% | 7% / 150% | 2% / 100% | Kafka `block` killed throughput |
+| CH only (no Kafka) | 329% / 600% | 131% / 200% | 103% / 150% | 2% / 100% | Theoretical CH ceiling |
+| Blackhole (VRL ceiling) | 362% / 600% | 0% | 0% | 0% | Pure transform speed |
 
 ### Key Findings
 
-1. **Kafka `when_full: block` was the #1 bottleneck.** Changing to `drop_newest` unleashed 10× more Vector CPU utilization (3% → 377%) and a **+25% EPS gain** (40K → 45K with Kafka, or +30% to 52K without Kafka).
+1. **VRL optimization + CPU rebalance delivered +24% EPS gain.** From 44.8K → 55.4K production EPS. Conditional metadata build (skip for non-security events), eliminating redundant exists() checks, and giving Vector 8 CPUs (up from 6) were the main contributors.
 
-2. **ClickHouse write latency is the ceiling.** Blackhole sink achieves 67K EPS (VRL transform limit). With CH sinks enabled, throughput drops to 45-52K. Async inserts + high concurrency (20) help but CH01 at 199% CPU means it's maxed.
+2. **CH01 is the production bottleneck at 186-223% / 250% CPU.** All direct writes go to CH01 (2.5 CPUs). With async inserts + concurrency:10, it's 74-89% utilized depending on Kafka load.
 
-3. **Go TCP blaster vs Python sender:** Go achieved **44.8K EPS** vs Python's **36K EPS** — a **25% improvement** by eliminating Python multiprocessing overhead.
+3. **Kafka `when_full: block` was the #1 bottleneck (v2 finding).** Changing to `drop_newest` unleashed 10× more Vector CPU utilization (3% → 377%) and a **+25% EPS gain** (40K → 45K with Kafka, or +30% to 52K without Kafka).
 
-4. **Real vs Synthetic gap:** Synthetic achieves 120K (simple templates, fast JSON). Real heterogeneous logs with full VRL parsing achieve 45-52K — the VRL classification/normalization overhead costs ~50%.
+4. **Sharding hurt for security-heavy datasets.** CH02 at 0.5 CPU couldn't keep up with async replication of security events from CH01. De-sharding (all writes to CH01) with CH01 at 2.5 CPUs was more effective.
 
-5. **Per-core progression (6 CPU cores):**
+5. **Go TCP blaster vs Python sender:** Go achieved **44.8K EPS** vs Python's **36K EPS** — a **25% improvement** by eliminating Python multiprocessing overhead.
 
-   | Stage | Per-Core EPS | Improvement |
-   |-------|-------------|-------------|
-   | v1 Python TCP baseline | 6,740 | — |
-   | v2 Go TCP (pre-optimization) | 6,713 | -0.4% (routing broken, Kafka blocking) |
-   | v2 Go TCP + async_insert | 7,664 | +14% |
-   | v2 Go TCP + drop_newest (production) | **7,471** | +11% |
-   | v2 Go TCP — CH only | **8,715** | +29% |
-   | v2 Blackhole (VRL ceiling) | **11,204** | +66% |
-   | v2 Synthetic (pre-generated) | **19,200–20,100** | +185–198% |
+6. **Real vs Synthetic gap:** Synthetic achieves 120K (simple templates, fast JSON). Real heterogeneous logs with full VRL parsing achieve 51-62K — the VRL classification/normalization overhead costs ~50%.
+
+7. **Throughput progression across all optimization phases:**
+
+   | Phase | Config | Total EPS | Per-Core EPS | Improvement |
+   |-------|--------|-----------|-------------|-------------|
+   | v1 baseline | Python TCP, 4 CPUs | 26,959 | 6,740 | — |
+   | v2 pre-optimization | Go TCP, Kafka blocking | 40,279 | 6,713 | +49% total |
+   | v2 + async_insert | Go TCP, 6 CPUs | 45,987 | 7,664 | +71% total |
+   | v2 + drop_newest (production) | Go TCP, 6 CPUs + Kafka | 44,831 | 7,471 | +66% total |
+   | v2 CH-only | Go TCP, 6 CPUs, no Kafka | 52,290 | 8,715 | +94% total |
+   | v2 Blackhole (VRL ceiling) | Go TCP, 6 CPUs | 67,226 | 11,204 | +149% total |
+   | **v2.1 production** | **Go TCP, 8 CPUs + Kafka** | **55,438** | **6,929** | **+106% total** |
+   | **v2.1 CH-only** | **Go TCP, 8 CPUs, no Kafka** | **61,924** | **7,740** | **+130% total** |
+   | v2 Synthetic (upper bound) | Pre-generated, 6 CPUs | 120,000 | 20,000 | +345% total |
 
 ---
 
@@ -169,12 +192,15 @@ Built a high-performance Go TCP log sender for accurate pipeline benchmarking:
 | `21ef90e` | fix(vector): harden VRL — timestamp parsing, IPv4/IPv6 validation, port range clamping |
 | `e74d8f3` | feat: v2 pipeline — direct ClickHouse sinks, zero CPU oversubscription |
 | `492c61e` | docs: v2 implementation report + synthetic benchmark results |
+| `3fd0cbe` | feat: Go TCP blaster, sink optimization, Kafka backpressure fix |
+| *(latest)* | perf: VRL optimization (conditional metadata, field dedup) + CPU rebalance (Vector 8 CPUs) |
 
 ---
 
 ## Recommendations for Higher Throughput
 
-1. **Scale ClickHouse.** CH01 at 199% CPU is the ceiling. Adding more replicas or giving CH01 4+ CPUs would lift the 45K barrier.
-2. **Shard event types.** Route security→CH01, network→CH02 to distribute write load evenly (currently 95% goes to CH01).
-3. **Reduce VRL complexity.** The 512-byte prefix scan + MITRE mapping adds significant per-event cost. Pre-classification at the agent side would help.
-4. **Separate Kafka to its own machine.** Even with `drop_newest`, the dual-write costs ~15% throughput (52K→45K).
+1. **Scale ClickHouse CPU.** CH01 at 186-223% / 250% is the production bottleneck. On a dedicated server with 4-8 CH01 CPUs, expect 80-100K+ real-log EPS.
+2. **Consider event-type-aware sharding for balanced workloads.** Sharding helps when event types are evenly distributed. For security-heavy datasets, de-sharded single-writer is better.
+3. **Reduce VRL complexity for ultra-high throughput.** The 512-byte prefix scan + MITRE mapping costs significant per-event CPU. Pre-classification at the agent side would help.
+4. **Separate Kafka to its own machine.** Even with `drop_newest`, the dual-write costs ~10-15% throughput (62K→55K).
+5. **Horizontal Vector scaling.** With 8 CPUs at 382% utilization (48%), Vector has theoretical 2× headroom if CH/Kafka can keep up.

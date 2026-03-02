@@ -573,8 +573,8 @@ transforms:
         if err != null { .duration_ms = 0 }
 
         _p_v = if exists(.pid) { .pid } else { 0 }
-        _p_int, err = to_int(_p_v)
-        if err != null { _p_int = 0 }
+        .pid, err = to_int(_p_v)
+        if err != null { .pid = 0 }
 
         .dns_query = if exists(.dns_query) { to_string!(.dns_query) } else if exists(.query) { to_string!(.query) } else { "" }
         .geo_country = if exists(.geo_country) { to_string!(.geo_country) } else if exists(.country) { to_string!(.country) } else { "" }
@@ -587,25 +587,26 @@ transforms:
       # Object rebuild strips all unexpected fields for security.
       # ══════════════════════════════════════════════════════════════════
 
-      # ── Build metadata map ───────────────────────────────────────────
-      _metadata = {}
-      if exists(.user_id) { _metadata.user_id = to_string!(.user_id) }
-      if exists(.ip_address) {
-        _ip_str = to_string!(.ip_address)
-        if match(_ip_str, r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$') {
-          _metadata.ip_address = _ip_str
-        } else {
-          _metadata.ip_address = "0.0.0.0"
+      # ── Build metadata map (full for security, minimal for others) ──
+      _metadata = { "original_source_type": _src_type }
+      if .clif_event_type == "security" {
+        if exists(.user_id) { _metadata.user_id = to_string!(.user_id) }
+        if exists(.ip_address) {
+          _ip_str = to_string!(.ip_address)
+          if match(_ip_str, r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$') {
+            _metadata.ip_address = _ip_str
+          } else {
+            _metadata.ip_address = "0.0.0.0"
+          }
         }
+        if exists(.request_id) { _metadata.request_id = to_string!(.request_id) }
+        if exists(.container_name) { _metadata.container_name = to_string!(.container_name) }
+        if exists(.container_id) { _metadata.container_id = to_string!(.container_id) }
+        if exists(.facility) { _metadata.syslog_facility = to_string!(.facility) }
+        if exists(.appname) { _metadata.appname = to_string!(.appname) }
+        if exists(.procid) { _metadata.procid = to_string!(.procid) }
+        if exists(.image) { _metadata.docker_image = to_string!(.image) }
       }
-      if exists(.request_id) { _metadata.request_id = to_string!(.request_id) }
-      if exists(.container_name) { _metadata.container_name = to_string!(.container_name) }
-      if exists(.container_id) { _metadata.container_id = to_string!(.container_id) }
-      _metadata.original_source_type = _src_type
-      if exists(.facility) { _metadata.syslog_facility = to_string!(.facility) }
-      if exists(.appname) { _metadata.appname = to_string!(.appname) }
-      if exists(.procid) { _metadata.procid = to_string!(.procid) }
-      if exists(.image) { _metadata.docker_image = to_string!(.image) }
 
       # ── Format timestamp ─────────────────────────────────────────────
       _ts = format_timestamp!(.timestamp, format: "%Y-%m-%dT%H:%M:%S%.fZ")
@@ -646,36 +647,24 @@ transforms:
         }
 
       } else if .clif_event_type == "process" {
-        _hn = if exists(.hostname) { to_string!(.hostname) } else { "" }
-        _p = if exists(.pid) { .pid } else { 0 }
-        _pp = if exists(.ppid) { .ppid } else { 0 }
-        _u = if exists(.uid) { .uid } else { 0 }
-        _g = if exists(.gid) { .gid } else { 0 }
-        _bp = if exists(.binary_path) { to_string!(.binary_path) } else { "" }
-        _args = if exists(.arguments) { to_string!(.arguments) } else { "" }
-        _cwd_v = if exists(.cwd) { to_string!(.cwd) } else { "" }
-        _ec = if exists(.exit_code) { .exit_code } else { -1 }
-        _cid = if exists(.proc_container_id) { to_string!(.proc_container_id) } else if exists(.container_id) { to_string!(.container_id) } else { "" }
-        _pn = if exists(.pod_name) { to_string!(.pod_name) } else { "" }
-        _ns_v = if exists(.ns) { to_string!(.ns) } else if exists(.namespace) { to_string!(.namespace) } else { "" }
-        _sc = if exists(.syscall) { to_string!(.syscall) } else { "" }
+        # Section D guaranteed all process fields exist — no exists() checks needed
         . = {
           "event_id": _eid,
           "clif_event_type": "process",
           "timestamp": _ts,
-          "hostname": _hn,
-          "pid": _p,
-          "ppid": _pp,
-          "uid": _u,
-          "gid": _g,
-          "binary_path": _bp,
-          "arguments": _args,
-          "cwd": _cwd_v,
-          "exit_code": _ec,
-          "container_id": _cid,
-          "pod_name": _pn,
-          "namespace": _ns_v,
-          "syscall": _sc,
+          "hostname": to_string!(.hostname),
+          "pid": .pid,
+          "ppid": .ppid,
+          "uid": .uid,
+          "gid": .gid,
+          "binary_path": to_string!(.binary_path),
+          "arguments": to_string!(.arguments),
+          "cwd": to_string!(.cwd),
+          "exit_code": .exit_code,
+          "container_id": to_string!(.proc_container_id),
+          "pod_name": to_string!(.pod_name),
+          "namespace": to_string!(.ns),
+          "syscall": to_string!(.syscall),
           "is_suspicious": 0,
           "detection_rule": "",
           "message_body": _msg_body,
@@ -684,50 +673,32 @@ transforms:
         }
 
       } else if .clif_event_type == "network" {
-        _hn = if exists(.hostname) { to_string!(.hostname) } else { "" }
-        _si = if exists(.src_ip) { to_string!(.src_ip) } else { "0.0.0.0" }
-        _sp_raw = if exists(.src_port) { .src_port } else { 0 }
-        _sp_v, err = to_int(_sp_raw)
-        if err != null || _sp_v < 0 || _sp_v > 65535 { _sp_v = 0 }
-        _di = if exists(.dst_ip) { to_string!(.dst_ip) } else { "0.0.0.0" }
-        _dp_raw = if exists(.dst_port) { .dst_port } else { 0 }
-        _dp_v, err = to_int(_dp_raw)
-        if err != null || _dp_v < 0 || _dp_v > 65535 { _dp_v = 0 }
-        _proto = if exists(.protocol) { to_string!(.protocol) } else { "TCP" }
-        _dir_v = if exists(.direction) { to_string!(.direction) } else { "outbound" }
-        _bs_v = if exists(.bytes_sent) { .bytes_sent } else { 0 }
-        _br_v = if exists(.bytes_received) { .bytes_received } else { 0 }
-        _dur_v = if exists(.duration_ms) { .duration_ms } else { 0 }
-        _pid_v = if exists(.pid) { .pid } else { 0 }
-        _pid_int, err = to_int(_pid_v)
-        if err != null { _pid_int = 0 }
-        _bp = if exists(.binary_path) { to_string!(.binary_path) } else { "" }
-        _cid = if exists(.container_id) { to_string!(.container_id) } else { "" }
-        _pn = if exists(.pod_name) { to_string!(.pod_name) } else { "" }
-        _ns_v = if exists(.namespace) { to_string!(.namespace) } else { "" }
-        _dq = if exists(.dns_query) { to_string!(.dns_query) } else { "" }
-        _gc = if exists(.geo_country) { to_string!(.geo_country) } else { "" }
+        # Section D guaranteed all network fields exist — no exists() checks needed
+        _net_bp = if exists(.binary_path) { to_string!(.binary_path) } else { "" }
+        _net_cid = if exists(.container_id) { to_string!(.container_id) } else { "" }
+        _net_pn = if exists(.pod_name) { to_string!(.pod_name) } else { "" }
+        _net_ns = if exists(.namespace) { to_string!(.namespace) } else { "" }
         . = {
           "event_id": _eid,
           "clif_event_type": "network",
           "timestamp": _ts,
-          "hostname": _hn,
-          "src_ip": _si,
-          "src_port": _sp_v,
-          "dst_ip": _di,
-          "dst_port": _dp_v,
-          "protocol": _proto,
-          "direction": _dir_v,
-          "bytes_sent": _bs_v,
-          "bytes_received": _br_v,
-          "duration_ms": _dur_v,
-          "pid": _pid_int,
-          "binary_path": _bp,
-          "container_id": _cid,
-          "pod_name": _pn,
-          "namespace": _ns_v,
-          "dns_query": _dq,
-          "geo_country": _gc,
+          "hostname": to_string!(.hostname),
+          "src_ip": to_string!(.src_ip),
+          "src_port": .src_port,
+          "dst_ip": to_string!(.dst_ip),
+          "dst_port": .dst_port,
+          "protocol": to_string!(.protocol),
+          "direction": to_string!(.direction),
+          "bytes_sent": .bytes_sent,
+          "bytes_received": .bytes_received,
+          "duration_ms": .duration_ms,
+          "pid": .pid,
+          "binary_path": _net_bp,
+          "container_id": _net_cid,
+          "pod_name": _net_pn,
+          "namespace": _net_ns,
+          "dns_query": to_string!(.dns_query),
+          "geo_country": to_string!(.geo_country),
           "is_suspicious": 0,
           "detection_rule": "",
           "message_body": _msg_body,
@@ -792,11 +763,11 @@ sinks:
       timeout_secs: 1
     buffer:
       type: memory
-      max_events: 500000
+      max_events: 100000
       when_full: drop_newest
     compression: none
     request:
-      concurrency: 20
+      concurrency: 10
       timeout_secs: 60
       rate_limit_num: 9999
       rate_limit_duration_secs: 1
@@ -826,11 +797,11 @@ sinks:
       timeout_secs: 1
     buffer:
       type: memory
-      max_events: 500000
+      max_events: 100000
       when_full: drop_newest
     compression: none
     request:
-      concurrency: 20
+      concurrency: 10
       timeout_secs: 60
       rate_limit_num: 9999
       rate_limit_duration_secs: 1
@@ -860,11 +831,11 @@ sinks:
       timeout_secs: 1
     buffer:
       type: memory
-      max_events: 500000
+      max_events: 100000
       when_full: drop_newest
     compression: none
     request:
-      concurrency: 20
+      concurrency: 10
       timeout_secs: 60
       rate_limit_num: 9999
       rate_limit_duration_secs: 1
@@ -894,11 +865,11 @@ sinks:
       timeout_secs: 1
     buffer:
       type: memory
-      max_events: 500000
+      max_events: 100000
       when_full: drop_newest
     compression: none
     request:
-      concurrency: 20
+      concurrency: 10
       timeout_secs: 60
       rate_limit_num: 9999
       rate_limit_duration_secs: 1

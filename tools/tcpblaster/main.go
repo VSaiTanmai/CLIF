@@ -111,7 +111,7 @@ func main() {
 	durationSec := float64(*duration)
 	eps := float64(eventsSent) / durationSec
 	mbps := float64(bytesSent) / (1024 * 1024) / durationSec
-	vectorCPUs := 6.0
+	vectorCPUs := 8.0
 	epsPerCore := eps / vectorCPUs
 
 	fmt.Println()

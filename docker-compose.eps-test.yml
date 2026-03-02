@@ -64,10 +64,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
+          cpus: '0.25'
           memory: 512M
         reservations:
-          cpus: '0.25'
+          cpus: '0.1'
           memory: 256M
 
   # =========================================================================
@@ -112,7 +112,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2'
+          cpus: '2.5'
           memory: 2G
         reservations:
           cpus: '1'
@@ -160,10 +160,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.5'
+          cpus: '0.5'
           memory: 1536M
         reservations:
-          cpus: '0.5'
+          cpus: '0.25'
           memory: 768M
 
   # =========================================================================
@@ -208,10 +208,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1'
+          cpus: '0.5'
           memory: 1G
         reservations:
-          cpus: '0.5'
+          cpus: '0.25'
           memory: 512M
 
   # =========================================================================
@@ -294,7 +294,7 @@ services:
       - clif-backend
 
   # =========================================================================
-  # Vector — Log Pipeline (6 threads, 3G RAM, direct ClickHouse sinks)
+  # Vector — Log Pipeline (8 threads, 3G RAM, direct ClickHouse sinks)
   # =========================================================================
   clif-vector:
     build:
@@ -321,7 +321,7 @@ services:
       VECTOR_KAFKA_BROKERS: redpanda01:9092
       # ── Vector runtime ──
       VECTOR_LOG: ${VECTOR_LOG_LEVEL:-info}
-      VECTOR_THREADS: ${VECTOR_THREADS:-6}
+      VECTOR_THREADS: ${VECTOR_THREADS:-8}
     volumes:
       - vector_data:/var/lib/vector
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -344,10 +344,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '6'
+          cpus: '8'
           memory: 3G
         reservations:
-          cpus: '3'
+          cpus: '4'
           memory: 1536M
 
   # =========================================================================
@@ -396,8 +396,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1'
+          cpus: '0.25'
           memory: 512M
         reservations:
-          cpus: '0.25'
+          cpus: '0.1'
           memory: 256M
