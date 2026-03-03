@@ -744,10 +744,18 @@ class TriageAgent:
                 callback=_delivery_callback,
             )
 
-            # Escalated events also go to anomaly-alerts
+            # Escalated events also go to anomaly-alerts + hunter-tasks
             if result.action == "escalate":
                 self._producer.produce(
                     topic=config.TOPIC_ANOMALY_ALERTS,
+                    value=payload,
+                    callback=_delivery_callback,
+                )
+                # Publish to hunter-tasks work queue so the Hunter Agent
+                # can pick up investigations.  Same payload — the hunter
+                # maps event_id → alert_id, adjusted_score → trigger_score.
+                self._producer.produce(
+                    topic=config.TOPIC_HUNTER_TASKS,
                     value=payload,
                     callback=_delivery_callback,
                 )

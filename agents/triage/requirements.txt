@@ -2,8 +2,8 @@
 # ============================================
 
 # Core ML / Inference
-onnxruntime==1.17.3
-numpy>=1.24,<2.0
+onnxruntime>=1.17,<2.0
+numpy>=1.24,<3.0
 joblib>=1.3
 scikit-learn>=1.3          # Dependency for EIF/joblib deserialization
 river>=0.21                # Adaptive Random Forest online learner

@@ -21,6 +21,7 @@ INPUT_TOPICS = [
 TOPIC_TEMPLATED_LOGS = os.getenv("TOPIC_TEMPLATED_LOGS", "templated-logs")
 TOPIC_TRIAGE_SCORES = os.getenv("TOPIC_TRIAGE_SCORES", "triage-scores")
 TOPIC_ANOMALY_ALERTS = os.getenv("TOPIC_ANOMALY_ALERTS", "anomaly-alerts")
+TOPIC_HUNTER_TASKS = os.getenv("TOPIC_HUNTER_TASKS", "hunter-tasks")
 TOPIC_DEAD_LETTER = os.getenv("TOPIC_DEAD_LETTER", "dead-letter")
 
 # ── ClickHouse ──────────────────────────────────────────────────────────────

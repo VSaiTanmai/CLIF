@@ -268,6 +268,7 @@ services:
       TOPIC_TEMPLATED_LOGS: "templated-logs"
       TOPIC_TRIAGE_SCORES: "triage-scores"
       TOPIC_ANOMALY_ALERTS: "anomaly-alerts"
+      TOPIC_HUNTER_TASKS: "hunter-tasks"
       TOPIC_DEAD_LETTER: "dead-letter"
       # ── ClickHouse (PC1 via extra_hosts) ──
       CLICKHOUSE_HOST: ${DATA_IP}
@@ -284,18 +285,21 @@ services:
       DRAIN3_STATE_PATH: /app/drain3_state.bin
       # ── ML model paths ──
       MODEL_DIR: /models
-      MODEL_LGBM_PATH: /models/lgbm_v1.0.0.onnx
-      MODEL_EIF_PATH: /models/eif_v1.0.0.pkl
+      MODEL_LGBM_PATH: /models/lgbm_v2.0.0.onnx
+      MODEL_EIF_PATH: /models/eif_v2.0.0.pkl
       MODEL_EIF_THRESHOLD_PATH: /models/eif_threshold.npy
-      MODEL_ARF_CHECKPOINT: /models/arf_v1.0.0.pkl
+      MODEL_EIF_CALIBRATION_PATH: /models/eif_calibration.npz
+      MODEL_ARF_CHECKPOINT: /models/arf_v2.0.0.pkl
       FEATURE_COLS_PATH: /models/feature_cols.pkl
       MANIFEST_PATH: /models/manifest.json
-      # ── Scoring ──
-      SCORE_WEIGHTS: "lgbm=0.50,eif=0.30,arf=0.20"
-      DEFAULT_SUSPICIOUS_THRESHOLD: "0.70"
-      DEFAULT_ANOMALOUS_THRESHOLD: "0.90"
-      DISAGREEMENT_THRESHOLD: "0.35"
+      # ── Scoring (v4 inference-aligned) ──
+      SCORE_WEIGHTS: "lgbm=0.60,eif=0.15,arf=0.25"
+      DEFAULT_SUSPICIOUS_THRESHOLD: "0.39"
+      DEFAULT_ANOMALOUS_THRESHOLD: "0.89"
+      DISAGREEMENT_THRESHOLD: "0.30"
       FEATURE_STALENESS_TIMEOUT_SEC: "300"
+      EIF_ANOMALY_OVERRIDE_THRESHOLD: "0.65"
+      EIF_ANOMALY_OVERRIDE_FLOOR: "0.45"
       # ── Performance (right-sized for 2 CPU) ──
       BATCH_SIZE: "500"
       INFERENCE_WORKERS: "2"
@@ -310,6 +314,10 @@ services:
       ARF_ADWIN_DELTA: "0.002"
       ARF_ADWIN_WARNING_DELTA: "0.01"
       ARF_SEED: "42"
+      ARF_CONFIDENCE_RAMP_SAMPLES: "10000"
+      ARF_LABEL_SOURCE: "lgbm_pseudo"
+      ARF_PSEUDO_LABEL_HIGH: "0.80"
+      ARF_PSEUDO_LABEL_LOW: "0.20"
       # ── Health / Self-test ──
       SELFTEST_ENABLED: "true"
       STARTUP_HEALTH_RETRIES: "30"
@@ -356,6 +364,7 @@ services:
       TOPIC_TEMPLATED_LOGS: "templated-logs"
       TOPIC_TRIAGE_SCORES: "triage-scores"
       TOPIC_ANOMALY_ALERTS: "anomaly-alerts"
+      TOPIC_HUNTER_TASKS: "hunter-tasks"
       TOPIC_DEAD_LETTER: "dead-letter"
       CLICKHOUSE_HOST: ${DATA_IP}
       CLICKHOUSE_PORT: ${CLICKHOUSE_NATIVE_PORT:-9000}
@@ -369,17 +378,20 @@ services:
       DRAIN3_CONFIG_PATH: /app/drain3.ini
       DRAIN3_STATE_PATH: /app/drain3_state.bin
       MODEL_DIR: /models
-      MODEL_LGBM_PATH: /models/lgbm_v1.0.0.onnx
-      MODEL_EIF_PATH: /models/eif_v1.0.0.pkl
+      MODEL_LGBM_PATH: /models/lgbm_v2.0.0.onnx
+      MODEL_EIF_PATH: /models/eif_v2.0.0.pkl
       MODEL_EIF_THRESHOLD_PATH: /models/eif_threshold.npy
-      MODEL_ARF_CHECKPOINT: /models/arf_v1.0.0.pkl
+      MODEL_EIF_CALIBRATION_PATH: /models/eif_calibration.npz
+      MODEL_ARF_CHECKPOINT: /models/arf_v2.0.0.pkl
       FEATURE_COLS_PATH: /models/feature_cols.pkl
       MANIFEST_PATH: /models/manifest.json
-      SCORE_WEIGHTS: "lgbm=0.50,eif=0.30,arf=0.20"
-      DEFAULT_SUSPICIOUS_THRESHOLD: "0.70"
-      DEFAULT_ANOMALOUS_THRESHOLD: "0.90"
-      DISAGREEMENT_THRESHOLD: "0.35"
+      SCORE_WEIGHTS: "lgbm=0.60,eif=0.15,arf=0.25"
+      DEFAULT_SUSPICIOUS_THRESHOLD: "0.39"
+      DEFAULT_ANOMALOUS_THRESHOLD: "0.89"
+      DISAGREEMENT_THRESHOLD: "0.30"
       FEATURE_STALENESS_TIMEOUT_SEC: "300"
+      EIF_ANOMALY_OVERRIDE_THRESHOLD: "0.65"
+      EIF_ANOMALY_OVERRIDE_FLOOR: "0.45"
       BATCH_SIZE: "500"
       INFERENCE_WORKERS: "2"
       CONN_TIME_WINDOW_SEC: "2.0"
@@ -392,6 +404,10 @@ services:
       ARF_ADWIN_DELTA: "0.002"
       ARF_ADWIN_WARNING_DELTA: "0.01"
       ARF_SEED: "42"
+      ARF_CONFIDENCE_RAMP_SAMPLES: "10000"
+      ARF_LABEL_SOURCE: "lgbm_pseudo"
+      ARF_PSEUDO_LABEL_HIGH: "0.80"
+      ARF_PSEUDO_LABEL_LOW: "0.20"
       SELFTEST_ENABLED: "true"
       STARTUP_HEALTH_RETRIES: "30"
       STARTUP_HEALTH_DELAY_SEC: "2.0"
