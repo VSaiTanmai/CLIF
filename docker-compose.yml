@@ -554,7 +554,7 @@ services:
     container_name: clif-consumer
     hostname: clif-consumer
     environment:
-      KAFKA_BROKERS: redpanda01:9092,redpanda02:9092,redpanda03:9092
+      KAFKA_BROKERS: redpanda01:9092
       CLICKHOUSE_HOST: clickhouse01
       CLICKHOUSE_ALT_HOSTS: clickhouse02:9000
       CLICKHOUSE_PORT: 9000
@@ -603,7 +603,7 @@ services:
     container_name: clif-consumer-2
     hostname: clif-consumer-2
     environment:
-      KAFKA_BROKERS: redpanda01:9092,redpanda02:9092,redpanda03:9092
+      KAFKA_BROKERS: redpanda01:9092
       CLICKHOUSE_HOST: clickhouse01
       CLICKHOUSE_ALT_HOSTS: clickhouse02:9000
       CLICKHOUSE_PORT: 9000
@@ -651,7 +651,7 @@ services:
     container_name: clif-consumer-3
     hostname: clif-consumer-3
     environment:
-      KAFKA_BROKERS: redpanda01:9092,redpanda02:9092,redpanda03:9092
+      KAFKA_BROKERS: redpanda01:9092
       CLICKHOUSE_HOST: clickhouse01
       CLICKHOUSE_ALT_HOSTS: clickhouse02:9000
       CLICKHOUSE_PORT: 9000
@@ -712,7 +712,7 @@ services:
       - "${VECTOR_STATSD_PORT:-8125}:8125/udp"   # StatsD metrics
       - "${VECTOR_PROM_PORT:-9598}:9598"          # Prometheus exporter
     environment:
-      VECTOR_KAFKA_BROKERS: redpanda01:9092,redpanda02:9092,redpanda03:9092
+      VECTOR_KAFKA_BROKERS: redpanda01:9092
       VECTOR_LOG: ${VECTOR_LOG_LEVEL:-info}
       VECTOR_THREADS: ${VECTOR_THREADS:-8}
     volumes:
@@ -931,7 +931,7 @@ services:
       dockerfile: Dockerfile
     environment:
       # ── Redpanda connectivity ──
-      KAFKA_BROKERS: "redpanda01:9092,redpanda02:9092,redpanda03:9092"
+      KAFKA_BROKERS: "redpanda01:9092"
       CONSUMER_GROUP_ID: "clif-triage-agent"
       # ── Input topics (same 4 ingestion topics) ──
       INPUT_TOPICS: "raw-logs,security-events,process-events,network-events"
@@ -1036,7 +1036,7 @@ services:
       context: ./agents/triage
       dockerfile: Dockerfile
     environment:
-      KAFKA_BROKERS: "redpanda01:9092,redpanda02:9092,redpanda03:9092"
+      KAFKA_BROKERS: "redpanda01:9092"
       CONSUMER_GROUP_ID: "clif-triage-agent"
       INPUT_TOPICS: "raw-logs,security-events,process-events,network-events"
       TOPIC_TEMPLATED_LOGS: "templated-logs"
@@ -1130,7 +1130,7 @@ services:
       context: ./agents/triage
       dockerfile: Dockerfile
     environment:
-      KAFKA_BROKERS: "redpanda01:9092,redpanda02:9092,redpanda03:9092"
+      KAFKA_BROKERS: "redpanda01:9092"
       CONSUMER_GROUP_ID: "clif-triage-agent"
       INPUT_TOPICS: "raw-logs,security-events,process-events,network-events"
       TOPIC_TEMPLATED_LOGS: "templated-logs"
@@ -1224,7 +1224,7 @@ services:
       context: ./agents/triage
       dockerfile: Dockerfile
     environment:
-      KAFKA_BROKERS: "redpanda01:9092,redpanda02:9092,redpanda03:9092"
+      KAFKA_BROKERS: "redpanda01:9092"
       CONSUMER_GROUP_ID: "clif-triage-agent"
       INPUT_TOPICS: "raw-logs,security-events,process-events,network-events"
       TOPIC_TEMPLATED_LOGS: "templated-logs"
