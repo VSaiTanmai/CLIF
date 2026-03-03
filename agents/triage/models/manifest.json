@@ -1,14 +1,14 @@
 {
   "version": "v3.0.0",
-  "trained_at": "2026-03-03T14:39:57Z",
+  "trained_at": "2026-03-03T17:18:24Z",
   "lgbm": {
     "active": "v2.0.0",
     "file": "lgbm_v2.0.0.onnx",
     "metrics": {
-      "accuracy": 0.9685,
-      "precision": 0.9682,
-      "recall": 0.9725,
-      "f1": 0.9704
+      "accuracy": 0.9615,
+      "precision": 0.9664,
+      "recall": 0.9608,
+      "f1": 0.9636
     },
     "best_iteration": 1000
   },
@@ -16,11 +16,11 @@
     "active": "v2.0.0",
     "file": "eif_v2.0.0.pkl",
     "calibration": {
-      "mean": 0.396258,
-      "std": 0.056144
+      "mean": 0.393821,
+      "std": 0.05784
     },
-    "threshold": 0.7379,
-    "discrimination_delta": -0.053
+    "threshold": 0.7402,
+    "discrimination_delta": -0.0379
   },
   "arf": {
     "active": "v2.0.0",
@@ -28,7 +28,7 @@
     "stream_csv": "features_arf_stream_features.csv"
   },
   "thresholds": {
-    "suspicious": 0.32,
+    "suspicious": 0.39,
     "anomalous": 0.89
   },
   "datasets": [
@@ -46,18 +46,18 @@
     "hdfs"
   ],
   "dataset_fingerprints": {
-    "load_cicids2017": "5e23076207d4",
+    "load_cicids2017": "90b8669c0fe3",
     "load_nsl_kdd": "df25d4c497a2",
     "load_unsw_nb15": "81b922c32c54",
-    "load_nf_unsw": "febe15472660",
-    "load_ton_iot": "c0c87be4704b",
-    "load_csic2010": "2cb9ac0f381e",
-    "load_evtx": "b5e255b0dbd6",
-    "load_loghub_linux": "4d350afef79f",
-    "load_loghub_apache": "bfb986cee596",
+    "load_nf_unsw": "9c1027c55770",
+    "load_ton_iot": "24d1ebc37d42",
+    "load_csic2010": "cb2c6dc17836",
+    "load_evtx": "0a37c0a1eb4a",
+    "load_loghub_linux": "065d2d7e368d",
+    "load_loghub_apache": "edc2c52e6475",
     "load_dns_exfil": "473eaf8b26d7",
-    "load_openssh": "850513c06d33",
-    "load_hdfs": "a11abc323d82"
+    "load_openssh": "3b4f442fc7a5",
+    "load_hdfs": "bd50e8ce2aaf"
   },
   "feature_cols": [
     "hour_of_day",

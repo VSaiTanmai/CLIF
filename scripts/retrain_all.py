@@ -203,7 +203,7 @@ def load_cicids2017() -> pd.DataFrame:
         dst_port           = _safe_col(df, "Destination Port").clip(0, 65535).values,
         template_rarity    = np.clip(0.5 + rng.normal(0, 0.1, n), 0, 1),
         threat_intel_flag  = np.zeros(n),
-        duration           = _safe_col(df, "Flow Duration").clip(0, 1e12).values,
+        duration           = (_safe_col(df, "Flow Duration") / 1e6).clip(0, 1e6).values,  # µs → seconds (inference does duration_ms/1000)
         same_srv_rate      = (_safe_col(df, "Subflow Fwd Packets") / fwd_pkts).clip(0, 1).values,
         diff_srv_rate      = np.zeros(n),
         serror_rate        = (_safe_col(df, "SYN Flag Count") / fwd_pkts).clip(0, 1).values,
@@ -371,7 +371,7 @@ def _load_netflow_format(
         dst_port           = _safe_col(df, "L4_DST_PORT").clip(0, 65535).values,
         template_rarity    = np.clip(0.5 + rng.normal(0, 0.1, n), 0, 1),
         threat_intel_flag  = np.zeros(n),
-        duration           = _safe_col(df, "FLOW_DURATION_MILLISECONDS").clip(0, 1e12).values,
+        duration           = (_safe_col(df, "FLOW_DURATION_MILLISECONDS") / 1000.0).clip(0, 1e6).values,  # ms → seconds
         same_srv_rate      = np.zeros(n),
         diff_srv_rate      = np.zeros(n),
         serror_rate        = np.zeros(n),
@@ -444,6 +444,8 @@ def load_csic2010() -> pd.DataFrame:
     # NO LEAKAGE: HTTP requests arrive with no severity level
     severity = np.zeros(n)
 
+    # ALIGNED WITH INFERENCE: CSIC HTTP logs arrive as web server logs (non-network path)
+    # source_type=8 (nginx/web) → raw-logs topic → non-network in feature_extractor.py
     return _make_frame(
         n,
         hour_of_day        = rng.randint(8, 20, n).astype(float),
@@ -452,20 +454,20 @@ def load_csic2010() -> pd.DataFrame:
         source_type_numeric= np.full(n, 8.0),
         src_bytes          = np.clip(src_bytes, 0, 1e9),
         dst_bytes          = np.zeros(n),
-        event_freq_1m      = rng.randint(1, 100, n).astype(float),
+        event_freq_1m      = np.zeros(n),                  # non-network → 0
         protocol           = np.full(n, 6.0),
         dst_port           = np.full(n, 80.0),
         template_rarity    = template_rarity,
         threat_intel_flag  = np.zeros(n),
-        duration           = rng.exponential(50, n),
-        same_srv_rate      = np.ones(n),
+        duration           = np.zeros(n),                  # non-network → 0
+        same_srv_rate      = np.zeros(n),                  # non-network → 0
         diff_srv_rate      = np.zeros(n),
         serror_rate        = np.zeros(n),
         rerror_rate        = np.zeros(n),
-        count              = rng.randint(1, 50, n).astype(float),
-        srv_count          = rng.randint(1, 50, n).astype(float),
-        dst_host_count     = np.ones(n),
-        dst_host_srv_count = np.ones(n),
+        count              = np.zeros(n),                  # non-network → 0
+        srv_count          = np.zeros(n),
+        dst_host_count     = np.zeros(n),
+        dst_host_srv_count = np.zeros(n),
         label              = labels.values,
         attack_type        = np.where(is_attack, "web_attack", "normal"),
         source_dataset     = np.full(n, "csic_2010", dtype=object),
@@ -499,16 +501,19 @@ def load_evtx() -> pd.DataFrame:
 
     attack_type = ("evtx_" + df["EVTX_Tactic"].str.lower().str.replace(" ", "_")).values
 
+    # ALIGNED WITH INFERENCE (feature_extractor.py non-network path):
+    #   event_freq_1m=0, protocol=6 (TCP default), count/srv_count=0,
+    #   dst_host_count/srv_count=0, src_bytes≈len(message)
     attack_frame = _make_frame(
         n_attack,
         hour_of_day        = rng.randint(0, 24, n_attack).astype(float),
         day_of_week        = rng.randint(0, 7, n_attack).astype(float),
         severity_numeric   = severity,
         source_type_numeric= np.full(n_attack, 2.0),
-        src_bytes          = np.zeros(n_attack),
+        src_bytes          = rng.randint(100, 2000, n_attack).astype(float),  # ≈ len(event message)
         dst_bytes          = np.zeros(n_attack),
-        event_freq_1m      = rng.randint(1, 200, n_attack).astype(float),
-        protocol           = np.where(dst_port > 0, 6.0, 0.0),
+        event_freq_1m      = np.zeros(n_attack),           # non-network → 0
+        protocol           = np.full(n_attack, 6.0),       # non-network default = TCP(6)
         dst_port           = dst_port,
         template_rarity    = tr_attack,
         threat_intel_flag  = np.zeros(n_attack),
@@ -517,10 +522,10 @@ def load_evtx() -> pd.DataFrame:
         diff_srv_rate      = np.zeros(n_attack),
         serror_rate        = np.zeros(n_attack),
         rerror_rate        = np.zeros(n_attack),
-        count              = np.ones(n_attack),
-        srv_count          = np.ones(n_attack),
-        dst_host_count     = np.ones(n_attack),
-        dst_host_srv_count = np.ones(n_attack),
+        count              = np.zeros(n_attack),            # non-network → 0
+        srv_count          = np.zeros(n_attack),
+        dst_host_count     = np.zeros(n_attack),
+        dst_host_srv_count = np.zeros(n_attack),
         label              = np.ones(n_attack, dtype=int),
         attack_type        = attack_type,
         source_dataset     = np.full(n_attack, "evtx", dtype=object),
@@ -534,10 +539,10 @@ def load_evtx() -> pd.DataFrame:
         day_of_week        = rng.randint(0, 5, n_norm).astype(float),
         severity_numeric   = np.zeros(n_norm),            # Information level
         source_type_numeric= np.full(n_norm, 2.0),
-        src_bytes          = np.zeros(n_norm),
+        src_bytes          = rng.randint(100, 1500, n_norm).astype(float),  # ≈ len(event message)
         dst_bytes          = np.zeros(n_norm),
-        event_freq_1m      = rng.randint(5, 60, n_norm).astype(float),
-        protocol           = np.zeros(n_norm),
+        event_freq_1m      = np.zeros(n_norm),             # non-network → 0
+        protocol           = np.full(n_norm, 6.0),         # non-network default = TCP(6)
         dst_port           = np.zeros(n_norm),
         template_rarity    = np.clip(0.4 + rng.normal(0, 0.1, n_norm), 0, 1),
         threat_intel_flag  = np.zeros(n_norm),
@@ -546,10 +551,10 @@ def load_evtx() -> pd.DataFrame:
         diff_srv_rate      = np.zeros(n_norm),
         serror_rate        = np.zeros(n_norm),
         rerror_rate        = np.zeros(n_norm),
-        count              = rng.randint(1, 10, n_norm).astype(float),
-        srv_count          = rng.randint(1, 10, n_norm).astype(float),
-        dst_host_count     = np.ones(n_norm),
-        dst_host_srv_count = np.ones(n_norm),
+        count              = np.zeros(n_norm),             # non-network → 0
+        srv_count          = np.zeros(n_norm),
+        dst_host_count     = np.zeros(n_norm),
+        dst_host_srv_count = np.zeros(n_norm),
         label              = np.zeros(n_norm, dtype=int),
         attack_type        = np.full(n_norm, "normal", dtype=object),
         source_dataset     = np.full(n_norm, "evtx", dtype=object),
@@ -607,16 +612,17 @@ def load_loghub_linux() -> pd.DataFrame:
         np.where(is_attack, "auth_failure", "normal"),
     )
 
+    # ALIGNED WITH INFERENCE: non-network path in feature_extractor.py
     return _make_frame(
         n,
         hour_of_day        = hour.values,
         day_of_week        = rng.randint(0, 7, n).astype(float),
         severity_numeric   = severity,
         source_type_numeric= np.full(n, 1.0),
-        src_bytes          = np.zeros(n),
+        src_bytes          = content.str.len().clip(10, 5000).astype(float).values,  # ≈ len(msg)
         dst_bytes          = np.zeros(n),
-        event_freq_1m      = rng.randint(1, 100, n).astype(float),
-        protocol           = np.zeros(n),
+        event_freq_1m      = np.zeros(n),                  # non-network → 0
+        protocol           = np.full(n, 6.0),              # non-network default TCP(6)
         dst_port           = dst_port,
         template_rarity    = template_rarity,
         threat_intel_flag  = np.zeros(n),
@@ -625,10 +631,10 @@ def load_loghub_linux() -> pd.DataFrame:
         diff_srv_rate      = np.zeros(n),
         serror_rate        = np.zeros(n),
         rerror_rate        = np.zeros(n),
-        count              = np.ones(n),
-        srv_count          = np.ones(n),
-        dst_host_count     = np.ones(n),
-        dst_host_srv_count = np.ones(n),
+        count              = np.zeros(n),                  # non-network → 0
+        srv_count          = np.zeros(n),
+        dst_host_count     = np.zeros(n),
+        dst_host_srv_count = np.zeros(n),
         label              = labels.values,
         attack_type        = attack_type,
         source_dataset     = np.full(n, "loghub_linux", dtype=object),
@@ -667,15 +673,16 @@ def load_loghub_apache() -> pd.DataFrame:
 
     template_rarity = np.clip(0.5 + rng.normal(0, 0.15, n), 0, 1)
 
+    # ALIGNED WITH INFERENCE: non-network path in feature_extractor.py
     return _make_frame(
         n,
         hour_of_day        = rng.randint(0, 24, n).astype(float),
         day_of_week        = rng.randint(0, 7, n).astype(float),
         severity_numeric   = severity,
         source_type_numeric= np.full(n, 8.0),
-        src_bytes          = np.zeros(n),
+        src_bytes          = content.str.len().clip(10, 5000).astype(float).values,  # ≈ len(msg)
         dst_bytes          = np.zeros(n),
-        event_freq_1m      = rng.randint(1, 200, n).astype(float),
+        event_freq_1m      = np.zeros(n),                  # non-network → 0
         protocol           = np.full(n, 6.0),
         dst_port           = np.full(n, 80.0),
         template_rarity    = template_rarity,
@@ -685,10 +692,10 @@ def load_loghub_apache() -> pd.DataFrame:
         diff_srv_rate      = np.zeros(n),
         serror_rate        = np.zeros(n),
         rerror_rate        = np.zeros(n),
-        count              = np.ones(n),
-        srv_count          = np.ones(n),
-        dst_host_count     = np.ones(n),
-        dst_host_srv_count = np.ones(n),
+        count              = np.zeros(n),                  # non-network → 0
+        srv_count          = np.zeros(n),
+        dst_host_count     = np.zeros(n),
+        dst_host_srv_count = np.zeros(n),
         label              = labels.values,
         attack_type        = np.where(is_error, "web_error", "normal"),
         source_dataset     = np.full(n, "loghub_apache", dtype=object),
@@ -866,15 +873,16 @@ def load_openssh() -> pd.DataFrame:
         np.where(is_attack, "ssh_auth_failure", "normal"),
     )
 
+    # ALIGNED WITH INFERENCE: non-network path in feature_extractor.py
     return _make_frame(
         n,
         hour_of_day        = hour.values,
         day_of_week        = rng.randint(0, 7, n).astype(float),
         severity_numeric   = severity,
         source_type_numeric= np.full(n, 1.0),
-        src_bytes          = np.zeros(n),
+        src_bytes          = content.str.len().clip(10, 5000).astype(float).values,  # ≈ len(msg)
         dst_bytes          = np.zeros(n),
-        event_freq_1m      = rng.randint(1, 200, n).astype(float),
+        event_freq_1m      = np.zeros(n),                  # non-network → 0
         protocol           = np.full(n, 6.0),
         dst_port           = np.full(n, 22.0),
         template_rarity    = template_rarity,
@@ -884,10 +892,10 @@ def load_openssh() -> pd.DataFrame:
         diff_srv_rate      = np.zeros(n),
         serror_rate        = np.zeros(n),
         rerror_rate        = np.zeros(n),
-        count              = np.ones(n),
-        srv_count          = np.ones(n),
-        dst_host_count     = np.ones(n),
-        dst_host_srv_count = np.ones(n),
+        count              = np.zeros(n),                  # non-network → 0
+        srv_count          = np.zeros(n),
+        dst_host_count     = np.zeros(n),
+        dst_host_srv_count = np.zeros(n),
         label              = labels.values,
         attack_type        = attack_type,
         source_dataset     = np.full(n, "openssh", dtype=object),
@@ -951,16 +959,19 @@ def load_hdfs() -> pd.DataFrame:
     # template_rarity: event count normalised (very long traces are rarer)
     template_rarity = np.clip(event_count / 100.0, 0.0, 1.0)
 
+    # ALIGNED WITH INFERENCE: non-network path in feature_extractor.py
+    #   HDFS traces are log-type data → event_freq_1m=0, count/srv_count=0,
+    #   protocol=6(TCP default), src_bytes≈len(message), dst_host_*=0
     return _make_frame(
         n,
         hour_of_day        = rng.randint(0, 24, n).astype(float),
         day_of_week        = rng.randint(0, 7, n).astype(float),
         severity_numeric   = severity,
         source_type_numeric= np.full(n, 1.0),
-        src_bytes          = np.zeros(n),
+        src_bytes          = features_str.str.len().clip(10, 5000).astype(float).values,  # ≈ len(msg)
         dst_bytes          = np.zeros(n),
-        event_freq_1m      = event_count,
-        protocol           = np.zeros(n),
+        event_freq_1m      = np.zeros(n),                  # non-network → 0
+        protocol           = np.full(n, 6.0),              # non-network default TCP(6)
         dst_port           = np.full(n, 8020.0),         # HDFS namenode port
         template_rarity    = template_rarity,
         threat_intel_flag  = np.zeros(n),
@@ -969,10 +980,10 @@ def load_hdfs() -> pd.DataFrame:
         diff_srv_rate      = np.zeros(n),
         serror_rate        = np.zeros(n),
         rerror_rate        = np.zeros(n),
-        count              = event_count,
-        srv_count          = np.clip(block_type, 0, 100),
-        dst_host_count     = np.ones(n),
-        dst_host_srv_count = np.ones(n),
+        count              = np.zeros(n),                  # non-network → 0
+        srv_count          = np.zeros(n),
+        dst_host_count     = np.zeros(n),
+        dst_host_srv_count = np.zeros(n),
         label              = labels,
         attack_type        = np.where(labels == 1, "hdfs_anomaly", "normal"),
         source_dataset     = np.full(n, "hdfs", dtype=object),

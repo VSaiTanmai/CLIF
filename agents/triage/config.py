@@ -70,10 +70,10 @@ for pair in _raw_weights.split(","):
 # v3.0 thresholds — retrained 2026-03-03, 12 datasets, 175K rows.
 # F1=0.9704, AUC=0.9960, Acc=0.9685, 1000 iterations (GPU).
 # Weights: LGBM=0.60, EIF=0.15(flipped), ARF=0.25.
-# suspicious=0.32 → detect=98.7%, FPR=4.90%
-# anomalous=0.89  → detect=49.9%, FPR=0.12%
+# v4.0 (inference-aligned): suspicious=0.39 → detect=97.5%, FPR=4.90%
+# anomalous=0.89  → detect=44.4%, FPR=0.08%
 DEFAULT_SUSPICIOUS_THRESHOLD = float(
-    os.getenv("DEFAULT_SUSPICIOUS_THRESHOLD", "0.32")
+    os.getenv("DEFAULT_SUSPICIOUS_THRESHOLD", "0.39")
 )
 DEFAULT_ANOMALOUS_THRESHOLD = float(
     os.getenv("DEFAULT_ANOMALOUS_THRESHOLD", "0.89")
